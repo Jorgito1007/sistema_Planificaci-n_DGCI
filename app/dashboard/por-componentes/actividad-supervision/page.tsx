@@ -52,10 +52,8 @@ type RegistroPrincipio = {
 };
 
 const PRINCIPIOS: Principio[] = [
-  { id: 6, titulo: "Principio 6", color: "bg-blue-600", rowColor: "bg-[#cfe2f3]" },
-  { id: 7, titulo: "Principio 7", color: "bg-green-600", rowColor: "bg-[#d9ead3]" },
-  { id: 8, titulo: "Principio 8", color: "bg-yellow-500", rowColor: "bg-[#fff2cc]" },
-  { id: 9, titulo: "Principio 9", color: "bg-red-600", rowColor: "bg-[#f4cccc]" },
+  { id: 16, titulo: "Principio 16", color: "bg-blue-600", rowColor: "bg-[#cfe2f3]" },
+  { id: 17, titulo: "Principio 17", color: "bg-green-600", rowColor: "bg-[#d9ead3]" },
 ];
 
 function calcularCalificacion(p: {
@@ -100,6 +98,7 @@ function crearPreguntaDetalleVacia(
   const difundido = 0;
   const implementado = 0;
   const actualizado = 0;
+
   const calificacion = calcularCalificacion({
     existe,
     aprobado,
@@ -147,8 +146,9 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
   };
 }
 
-export default function EvaluacionRiesgosPage() {
-  const SUBMODULE_KEY = "sa_ERiesgos";
+export default function ActividadesSupervisionPage() {
+  const SUBMODULE_KEY = "sa_ASupervision";
+
   const [open, setOpen] = useState(false);
   const [principioActual, setPrincipioActual] = useState<Principio | null>(null);
 
@@ -158,9 +158,9 @@ export default function EvaluacionRiesgosPage() {
   });
 
   const [preguntasDetalle, setPreguntasDetalle] = useState<PreguntaDetalleForm[]>([]);
-const [registros, setRegistros] = useState<RegistroPrincipio[]>([]);
+  const [registros, setRegistros] = useState<RegistroPrincipio[]>([]);
 
-const cargarRegistros = async () => {
+  const cargarRegistros = async () => {
     try {
       const res = await fetch(
         `/api/control-interno/listar?subModuleKey=${SUBMODULE_KEY}`
@@ -180,14 +180,13 @@ const cargarRegistros = async () => {
     }
   };
 
-    useEffect(() => {
+  useEffect(() => {
     cargarRegistros();
   }, []);
 
-
-useEffect(() => {
-  localStorage.setItem("evaluacion_riesgos", JSON.stringify(registros));
-}, [registros]);
+  useEffect(() => {
+    localStorage.setItem("actividades_supervision", JSON.stringify(registros));
+  }, [registros]);
 
   const abrirModal = (principio: Principio) => {
     setPrincipioActual(principio);
@@ -314,16 +313,17 @@ useEffect(() => {
   return (
     <div className="space-y-6 p-6">
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-800">Componente 2</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Componente 5</h1>
         <h2 className="mt-2 text-lg font-semibold text-slate-700">
-          EVALUACIÓN DE RIESGOS
+          ACTIVIDADES DE SUPERVISIÓN
         </h2>
         <p className="mt-4 text-sm leading-6 text-slate-600 text-justify">
-          Se centra en identificar y analizar los riesgos considerando su criticidad y tolerancia para la consecución de los objetivos de la Entidad, de tal forma, que se disponga de una base para dar respuesta a los mismos a través de una adecuada administración.
+         Evaluar el desempeño del Control Interno de manera continua y/o independiente; sus resultados son comunicados a los responsables de aplicar las medidas correctivas incluyendo 
+         a la Máxima Autoridad según corresponda y supervisar que las deficiencias hayam sido corregidas correcta y oportunamente.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
         {PRINCIPIOS.map((principio) => (
           <button
             key={principio.id}
@@ -362,7 +362,9 @@ useEffect(() => {
                 </th>
 
                 <th colSpan={3} rowSpan={2} className="border px-2 py-2">
-                  EVIDENCIAS DE CUMPLIMIENTO DE LOS PUNTOS DE ENFOQUE
+                  EVIDENCIAS DE CUMPLIMIENTO DE LOS PARÁMETROS ESTABLECIDOS
+                  <br />
+                  Nombre del documento (Manual, guía, política, lineamiento, norma, procedimiento, etc)
                 </th>
 
                 <th colSpan={2} className="border px-2 py-2">
@@ -621,78 +623,92 @@ useEffect(() => {
                       </div>
                     </div>
 
-                    
-{/* FILA 1 */}
-<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
-  <div className="md:col-span-2">
-    <label className="mb-1 block text-sm font-medium">Cargo</label>
-    <input
-      className="w-full rounded-md border px-3 py-2"
-      value={pregunta.cargo}
-      onChange={(e) =>
-        actualizarPreguntaDetalle(index, "cargo", e.target.value)
-      }
-    />
-  </div>
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-sm font-medium">Cargo</label>
+                        <input
+                          className="w-full rounded-md border px-3 py-2"
+                          value={pregunta.cargo}
+                          onChange={(e) =>
+                            actualizarPreguntaDetalle(index, "cargo", e.target.value)
+                          }
+                        />
+                      </div>
 
-  <CampoBinario label="Existe" value={pregunta.existe} onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)} />
-  <CampoBinario label="Aprobado" value={pregunta.aprobado} onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)} />
-  <CampoBinario label="Difundido" value={pregunta.difundido} onChange={(v) => actualizarPreguntaDetalle(index, "difundido", v)} />
+                      <CampoBinario
+                        label="Existe"
+                        value={pregunta.existe}
+                        onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)}
+                      />
+                      <CampoBinario
+                        label="Aprobado"
+                        value={pregunta.aprobado}
+                        onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)}
+                      />
+                      <CampoBinario
+                        label="Difundido"
+                        value={pregunta.difundido}
+                        onChange={(v) => actualizarPreguntaDetalle(index, "difundido", v)}
+                      />
 
-  <CampoLectura
-    label="Está presente"
-    value={pregunta.estaPresente}
-    tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
-  />
+                      <CampoLectura
+                        label="Está presente"
+                        value={pregunta.estaPresente}
+                        tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
+                      />
 
-  <CampoBinario label="Implementado" value={pregunta.implementado} onChange={(v) => actualizarPreguntaDetalle(index, "implementado", v)} />
-  <CampoBinario label="Actualizado" value={pregunta.actualizado} onChange={(v) => actualizarPreguntaDetalle(index, "actualizado", v)} />
+                      <CampoBinario
+                        label="Implementado"
+                        value={pregunta.implementado}
+                        onChange={(v) => actualizarPreguntaDetalle(index, "implementado", v)}
+                      />
+                      <CampoBinario
+                        label="Actualizado"
+                        value={pregunta.actualizado}
+                        onChange={(v) => actualizarPreguntaDetalle(index, "actualizado", v)}
+                      />
 
-  <CampoLectura
-    label="Está funcionando"
-    value={pregunta.estaFuncionando}
-    tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
-  />
+                      <CampoLectura
+                        label="Está funcionando"
+                        value={pregunta.estaFuncionando}
+                        tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
+                      />
 
-  <CampoLectura label="Calificación" value={String(pregunta.calificacion)} />
+                      <CampoLectura label="Calificación" value={String(pregunta.calificacion)} />
 
-  <CampoLectura
-    label="Nivel"
-    value={pregunta.nivel}
-    tipo={
-      pregunta.nivel === "Bajo"
-        ? "danger"
-        : pregunta.nivel === "Medio"
-        ? "warning"
-        : "success"
-    }
-  />
-</div>
+                      <CampoLectura
+                        label="Nivel"
+                        value={pregunta.nivel}
+                        tipo={
+                          pregunta.nivel === "Bajo"
+                            ? "danger"
+                            : pregunta.nivel === "Medio"
+                            ? "warning"
+                            : "success"
+                        }
+                      />
+                    </div>
 
-{/* FILA 2 👉 AQUÍ LOS PONES JUNTOS */}
-<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
-  <div className="md:col-span-2">
-    <TipoDocumento
-      label="Tipo de documento"
-      value={pregunta.tipoDocumento}
-      onChange={(v) =>
-        actualizarPreguntaDetalle(index, "tipoDocumento", v)
-      }
-    />
-  </div>
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
+                      <div className="md:col-span-2">
+                        <TipoDocumento
+                          label="Tipo de documento"
+                          value={pregunta.tipoDocumento}
+                          onChange={(v) => actualizarPreguntaDetalle(index, "tipoDocumento", v)}
+                        />
+                      </div>
 
-  <div className="md:col-span-4">
-    <label className="mb-1 block text-sm font-medium">Descripción</label>
-    <input
-      className="w-full rounded-md border px-3 py-2"
-      value={pregunta.descripcion}
-      onChange={(e) =>
-        actualizarPreguntaDetalle(index, "descripcion", e.target.value)
-      }
-    />
-  </div>
-</div>
-        
+                      <div className="md:col-span-4">
+                        <label className="mb-1 block text-sm font-medium">Descripción</label>
+                        <input
+                          className="w-full rounded-md border px-3 py-2"
+                          value={pregunta.descripcion}
+                          onChange={(e) =>
+                            actualizarPreguntaDetalle(index, "descripcion", e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>
@@ -709,13 +725,13 @@ useEffect(() => {
                         />
                       </div>
 
-                      <CampoSiNo
+                      <CampoDifusion
                         label="Interna"
                         value={pregunta.interna}
                         onChange={(v) => actualizarPreguntaDetalle(index, "interna", v)}
                       />
 
-                      <CampoSiNo
+                      <CampoDifusion
                         label="Externa"
                         value={pregunta.externa}
                         onChange={(v) => actualizarPreguntaDetalle(index, "externa", v)}
@@ -814,11 +830,11 @@ function TipoDocumento({
         <option value="Formato">Formato</option>
         <option value="Formulario">Formulario</option>
         <option value="Guía">Guía</option>
-         <option value="Hoja de Ruta">Hoja de Ruta</option>
-          <option value="Informe">Informe</option>
-           <option value="Instructivo">Instructivo</option>
-            <option value="Inventario">Inventario</option>
-             <option value="Ley">Ley</option>
+        <option value="Hoja de Ruta">Hoja de Ruta</option>
+        <option value="Informe">Informe</option>
+        <option value="Instructivo">Instructivo</option>
+        <option value="Inventario">Inventario</option>
+        <option value="Ley">Ley</option>
         <option value="Lineamiento">Lineamiento</option>
         <option value="Lista">Lista</option>
         <option value="Lista de verificación">Lista de verificación</option>
@@ -848,7 +864,7 @@ function TipoDocumento({
   );
 }
 
-function CampoSiNo({
+function CampoDifusion({
   label,
   value,
   onChange,
@@ -875,7 +891,7 @@ function CampoSiNo({
         <option value="Informativo">Informativo</option>
         <option value="Intranet">Intranet</option>
         <option value="Lonas Impresas">Lonas Impresas</option>
-        <option value="Otros medios de difusión ">Otros medios de difusión </option>
+        <option value="Otros medios de difusión">Otros medios de difusión</option>
         <option value="Páginas de transparencia">Páginas de transparencia</option>
         <option value="Pantallas">Pantallas</option>
         <option value="Periódicos murales">Periódicos murales</option>

@@ -616,95 +616,78 @@ export default function EntornoControlPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="mb-1 block text-sm font-medium">Cargo</label>
-                        <input
-                          className="w-full rounded-md border px-3 py-2"
-                          value={pregunta.cargo}
-                          onChange={(e) =>
-                            actualizarPreguntaDetalle(index, "cargo", e.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
+                    
+{/* FILA 1 */}
+<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
+  <div className="md:col-span-2">
+    <label className="mb-1 block text-sm font-medium">Cargo</label>
+    <input
+      className="w-full rounded-md border px-3 py-2"
+      value={pregunta.cargo}
+      onChange={(e) =>
+        actualizarPreguntaDetalle(index, "cargo", e.target.value)
+      }
+    />
+  </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-7">
-                      <CampoBinario
-                        label="Existe"
-                        value={pregunta.existe}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)}
-                      />
-                      <CampoBinario
-                        label="Aprobado"
-                        value={pregunta.aprobado}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)}
-                      />
-                      <CampoBinario
-                        label="Difundido"
-                        value={pregunta.difundido}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "difundido", v)}
-                      />
+  <CampoBinario label="Existe" value={pregunta.existe} onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)} />
+  <CampoBinario label="Aprobado" value={pregunta.aprobado} onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)} />
+  <CampoBinario label="Difundido" value={pregunta.difundido} onChange={(v) => actualizarPreguntaDetalle(index, "difundido", v)} />
 
-                      <CampoLectura
-                        label="Está presente"
-                        value={pregunta.estaPresente}
-                        tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
-                      />
+  <CampoLectura
+    label="Está presente"
+    value={pregunta.estaPresente}
+    tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
+  />
 
-                      <CampoBinario
-                        label="Implementado"
-                        value={pregunta.implementado}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "implementado", v)}
-                      />
+  <CampoBinario label="Implementado" value={pregunta.implementado} onChange={(v) => actualizarPreguntaDetalle(index, "implementado", v)} />
+  <CampoBinario label="Actualizado" value={pregunta.actualizado} onChange={(v) => actualizarPreguntaDetalle(index, "actualizado", v)} />
 
-                      <CampoBinario
-                        label="Actualizado"
-                        value={pregunta.actualizado}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "actualizado", v)}
-                      />
+  <CampoLectura
+    label="Está funcionando"
+    value={pregunta.estaFuncionando}
+    tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
+  />
 
-                      <CampoLectura
-                        label="Está funcionando"
-                        value={pregunta.estaFuncionando}
-                        tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
-                      />
-                    </div>
+  <CampoLectura label="Calificación" value={String(pregunta.calificacion)} />
 
-                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-                      <CampoLectura label="Calificación" value={String(pregunta.calificacion)} />
+  <CampoLectura
+    label="Nivel"
+    value={pregunta.nivel}
+    tipo={
+      pregunta.nivel === "Bajo"
+        ? "danger"
+        : pregunta.nivel === "Medio"
+        ? "warning"
+        : "success"
+    }
+  />
+</div>
 
-                      <CampoLectura
-                        label="Nivel"
-                        value={pregunta.nivel}
-                        tipo={
-                          pregunta.nivel === "Bajo"
-                            ? "danger"
-                            : pregunta.nivel === "Medio"
-                            ? "warning"
-                            : "success"
-                        }
-                      />
+{/* FILA 2 👉 AQUÍ LOS PONES JUNTOS */}
+<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
+  <div className="md:col-span-2">
+    <TipoDocumento
+      label="Tipo de documento"
+      value={pregunta.tipoDocumento}
+      onChange={(v) =>
+        actualizarPreguntaDetalle(index, "tipoDocumento", v)
+      }
+    />
+  </div>
 
-                          <div>
-                        <TipoDocumento
-                        label="Tipo de documento"
-                        value={pregunta.tipoDocumento}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "tipoDocumento", v)}
-                      />
-                      </div>
-
-                      <div className="lg:col-span-2">
-                        <label className="mb-1 block text-sm font-medium">Descripción</label>
-                        <input
-                          className="w-full rounded-md border px-3 py-2"
-                          value={pregunta.descripcion}
-                          onChange={(e) =>
-                            actualizarPreguntaDetalle(index, "descripcion", e.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
+  <div className="md:col-span-4">
+    <label className="mb-1 block text-sm font-medium">Descripción</label>
+    <input
+      className="w-full rounded-md border px-3 py-2"
+      value={pregunta.descripcion}
+      onChange={(e) =>
+        actualizarPreguntaDetalle(index, "descripcion", e.target.value)
+      }
+    />
+  </div>
+</div>
+        
 
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>

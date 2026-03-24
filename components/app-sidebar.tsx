@@ -53,8 +53,8 @@ const porComponentesSubModules = [
   { id: 8, key: "sa_Entornocontrol", title: "Entorno de Control", href: "/dashboard/por-componentes/entorno-control" },
   { id: 9, key: "sa_ERiesgos", title: "Evaluación de Riesgos", href: "/dashboard/por-componentes/evaluacion-riesgos" },
   { id: 10, key: "sa_AControl", title: "Actividades de Control", href: "/dashboard/por-componentes/actividades-control" },
-  { id: 11, key: "sa_IyC", title: "Información y Comunicación", href: "/dashboard/por-componentes/sa_IyC" },
-  { id: 12, key: "sa_ASupervision", title: "Actividades de Supervisión", href: "/dashboard/por-componentes/sa_ASupervision" },
+  { id: 11, key: "sa_IyC", title: "Información y Comunicación", href: "/dashboard/por-componentes/Informa-Comuni" },
+  { id: 12, key: "sa_ASupervision", title: "Actividades de Supervisión", href: "/dashboard/por-componentes/actividad-supervision" },
 ];
 
 interface AppSidebarProps {
