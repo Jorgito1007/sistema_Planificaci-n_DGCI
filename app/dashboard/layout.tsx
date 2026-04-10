@@ -1,13 +1,14 @@
 import React from "react";
+import { auth } from "@/auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import jwt from "jsonwebtoken";
 
 import { AppSidebar } from "@/components/app-sidebar";
-
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Menu } from "lucide-react";
+import { getUserByEmail } from "@/lib/current-user";
 
 type SidebarUser = {
   email: string;
@@ -16,46 +17,64 @@ type SidebarUser = {
 };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
+  let user: SidebarUser | null = null;
 
-  if (!token) redirect("/auth/login");
+  // 1. Intentar con Google
+  const session = await auth();
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) redirect("/auth/login?error=Falta JWT_SECRET");
+  if (session?.user?.email?.endsWith("@uncsm.edu.ni")) {
+    const dbUser = await getUserByEmail(session.user.email);
 
-  let user: SidebarUser;
-
-  try {
-    const payload = jwt.verify(token, secret) as any;
+    if (!dbUser) {
+      redirect("/auth/login?error=Usuario no autorizado");
+    }
 
     user = {
-      email: payload.email,
-      full_name: payload.full_name ?? payload.fullName ?? "Usuario",
-      role: payload.role,
+      email: dbUser.email,
+      full_name: dbUser.full_name,
+      role: dbUser.role,
     };
-  } catch {
-    redirect("/auth/login");
+  }
+
+  // 2. Si no hay sesión Google, usar JWT tradicional
+  if (!user) {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("auth_token")?.value;
+
+    if (!token) redirect("/auth/login");
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) redirect("/auth/login?error=Falta JWT_SECRET");
+
+    try {
+      const payload = jwt.verify(token, secret) as any;
+
+      user = {
+        email: payload.email,
+        full_name: payload.full_name ?? payload.fullName ?? "Usuario",
+        role: payload.role,
+      };
+    } catch {
+      redirect("/auth/login");
+    }
   }
 
   return (
-<SidebarProvider
-  defaultOpen={true}
-  className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
->
-  <AppSidebar user={user} />
-  <SidebarInset className="min-w-0">
-    <div className="flex h-14 items-center gap-3 px-4">
-      <SidebarTrigger className="h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">
-        <Menu className="h-5 w-5" />
-      </SidebarTrigger>
-      <Separator orientation="vertical" className="h-6" />
-    </div>
+    <SidebarProvider
+      defaultOpen={true}
+      className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
+    >
+      <AppSidebar user={user} />
+      <SidebarInset className="min-w-0">
+        <div className="flex h-14 items-center gap-3 px-4">
+          <SidebarTrigger className="h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">
+            <Menu className="h-5 w-5" />
+          </SidebarTrigger>
+          <Separator orientation="vertical" className="h-6" />
+        </div>
 
-    <div className="p-4">
-      {children}
-    </div>
-  </SidebarInset>
-</SidebarProvider>
+        <div className="p-4">{children}</div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

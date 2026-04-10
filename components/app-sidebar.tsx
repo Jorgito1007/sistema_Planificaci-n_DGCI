@@ -57,6 +57,18 @@ const porComponentesSubModules = [
   { id: 12, key: "sa_ASupervision", title: "Actividades de Supervisión", href: "/dashboard/por-componentes/actividad-supervision" },
 ];
 
+const matrizSistemaAdminSubModules = [
+  { id: 13, title: "Administración de Talento Humano", href: "/dashboard/matriz_sa/ma_talento_humano" },
+  { id: 14, title: "Planeación y Programación", href: "/dashboard/matriz_sa/ma_planeacion" },
+  { id: 15, title: "Presupuesto", href: "/dashboard/matriz_sa/ma_presupuesto" },
+  { id: 16, title: "Administración Financiera", href: "/dashboard/matriz_sa/ma_financiera" },
+  { id: 17, title: "Contabilidad Integrada", href: "/dashboard/matriz_sa/ma_ConIntegrada" },
+  { id: 18, title: "Contratación y Administración de Bienes y Servicios", href: "/dashboard/matriz_sa/ma_contbys" },
+  { id: 19, title: "Tecnología de la Información", href: "/dashboard/matriz_sa/ma_TIC" },
+  { id: 20, title: "Inversiones en Programas y Proyectos", href: "/dashboard/matriz_sa/ma_InvPoyect" },
+  { id: 21, title: "Resultados", href: "/dashboard/matriz_sa/Resultados" },
+];
+
 interface AppSidebarProps {
   user: {
     email: string;
@@ -82,47 +94,63 @@ export function AppSidebar({ user }: AppSidebarProps) {
     (async () => {
       try {
         const res = await fetch("/api/me/permissions", { cache: "no-store" });
-        const data = await res.json();
-        setPerms(data);
+       const data = await res.json();
+setPerms({
+  allowAll: Boolean(data?.allowAll),
+  modules: Array.isArray(data?.modules) ? data.modules : [],
+  submodules: Array.isArray(data?.submodules) ? data.submodules : [],
+});
       } catch {
         setPerms({ allowAll: false, modules: [], submodules: [] });
       }
     })();
   }, []);
 
-  const allowedSubSet = useMemo(() => {
-    if (!perms || perms.allowAll) return null;
-    return new Set(perms.submodules.map((p) => Number(p.SubModuleId)));
-  }, [perms]);
+const allowedSubSet = useMemo(() => {
+  if (!perms || perms.allowAll) return new Set<number>();
+  return new Set((perms.submodules ?? []).map((p) => Number(p.SubModuleId)));
+}, [perms]);
 
-  const allowedModuleSet = useMemo(() => {
-    if (!perms || perms.allowAll) return null;
-    return new Set(perms.modules.map((m) => Number(m.ModuleId)));
-  }, [perms]);
+const allowedModuleSet = useMemo(() => {
+  if (!perms || perms.allowAll) return new Set<number>();
+  return new Set((perms.modules ?? []).map((m) => Number(m.ModuleId)));
+}, [perms]);
 
-  const visibleSistemaAdminSubs = useMemo(() => {
-    if (!perms) return [];
-    if (perms.allowAll) return sistemaAdminSubModules;
+const visibleSistemaAdminSubs = useMemo(() => {
+  if (!perms) return [];
+  if (perms.allowAll) return sistemaAdminSubModules;
 
-    return sistemaAdminSubModules.filter((s) => allowedSubSet?.has(Number(s.id)));
-  }, [perms, allowedSubSet]);
+  return sistemaAdminSubModules.filter((s) => allowedSubSet.has(Number(s.id)));
+}, [perms, allowedSubSet]);
 
 const visiblePorComponentesSubs = useMemo(() => {
   if (!perms) return [];
   if (perms.allowAll) return porComponentesSubModules;
 
   return porComponentesSubModules.filter((s) =>
-    allowedSubSet?.has(Number(s.id))
+    allowedSubSet.has(Number(s.id))
+  );
+}, [perms, allowedSubSet]);
+
+const visibleMatrizSistemaAdminSubs = useMemo(() => {
+  if (!perms) return [];
+  if (perms.allowAll) return matrizSistemaAdminSubModules;
+
+  return matrizSistemaAdminSubModules.filter((s) =>
+    allowedSubSet.has(Number(s.id))
   );
 }, [perms, allowedSubSet]);
 
   const canSeeSistemaAdmin = visibleSistemaAdminSubs.length > 0;
 const canSeePorComponentes =
-  (perms?.allowAll || allowedModuleSet?.has(2) || false) &&
+  (perms?.allowAll || allowedModuleSet.has(2)) &&
   visiblePorComponentesSubs.length > 0;
   const canSeeInformes = perms?.allowAll || allowedModuleSet?.has(3) || false;
   const canSeePermisos = perms?.allowAll || allowedModuleSet?.has(4) || false;
   const canSeeAuditoria = perms?.allowAll || allowedModuleSet?.has(5) || false;
+const canSeeMatrizSistemaAdmin =
+  (perms?.allowAll || allowedModuleSet.has(6)) &&
+  visibleMatrizSistemaAdminSubs.length > 0;
 
   return (
     <Sidebar
@@ -141,9 +169,9 @@ const canSeePorComponentes =
 )}
           {!collapsed && (
       <div className="flex min-w-0 flex-col">
-        <span className="text-sm text-center font-semibold text-sidebar-foreground">DGCI</span>
+    
         <span className="text-xs text-center text-sidebar-foreground/80">
-          Sistema de Planificación
+          Sistema de Control Interno
         </span>
       </div>
     )}
@@ -209,6 +237,45 @@ const canSeePorComponentes =
                 </Collapsible>
               )}
 
+{canSeeMatrizSistemaAdmin && (
+  <Collapsible defaultOpen={pathname.includes("/matriz-sistema-administrativo")}>
+    <SidebarMenuItem>
+      <CollapsibleTrigger asChild>
+        <SidebarMenuButton isActive={pathname.includes("/matriz-sistema-administrativo")}>
+          <Shield className="h-4 w-4" />
+          {!collapsed && <span>Matriz del Sistema Administrativo</span>}
+          {!collapsed && (
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+          )}
+        </SidebarMenuButton>
+      </CollapsibleTrigger>
+
+      {!collapsed && (
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {visibleMatrizSistemaAdminSubs.map((sub) => (
+              <SidebarMenuSubItem
+                key={sub.href}
+                className="border-b border-white/10 last:border-none"
+              >
+                <SidebarMenuSubButton asChild isActive={pathname === sub.href}>
+                  <Link
+                    href={sub.href}
+                    className="block text-[12px] leading-3 whitespace-normal break-words py-2 px-1"
+                    title={sub.title}
+                  >
+                    {sub.title}
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      )}
+    </SidebarMenuItem>
+  </Collapsible>
+)}
+
              {canSeePorComponentes && (
   <Collapsible defaultOpen={pathname.includes("/por-componentes")}>
     <SidebarMenuItem>
@@ -247,6 +314,8 @@ const canSeePorComponentes =
     </SidebarMenuItem>
   </Collapsible>
 )}
+
+
 
               {canSeeInformes && (
                 <SidebarMenuItem>

@@ -54,9 +54,7 @@ export default function DashboardStatsClient({
         <h1 className="text-2xl font-bold text-foreground text-balance">
           Panel Principal
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Resumen general del sistema de planificación
-        </p>
+  
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -106,7 +104,7 @@ export default function DashboardStatsClient({
       <Card>
         <CardContent className="bg-slate-50 rounded-lg p-4 shadow-inner">
           <p className="text-sm text-slate-700">
-            Bienvenido al Sistema de Planificación DGCI. Utilice el menú lateral
+            Bienvenido al Sistema de Control Interno. Utilice el menú lateral
             para navegar entre los diferentes módulos del sistema.
           </p>
         </CardContent>
