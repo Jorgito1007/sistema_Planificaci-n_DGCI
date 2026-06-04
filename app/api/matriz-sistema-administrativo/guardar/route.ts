@@ -1,12 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, sql } from "@/lib/db";
+import {
+  getCurrentUser,
+  getCurrentUserFromToken,
+  getUserByEmail,
+} from "@/lib/current-user";
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("ENTRÓ A GUARDAR MATRIZ");
+
     const body = await req.json();
+    console.log("BODY:", body);
+
     const pool = await getPool();
 
-    // 🔹 1. Obtener o crear la matriz por submódulo
+    let currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      const tokenUser = await getCurrentUserFromToken();
+
+      if (tokenUser?.email) {
+        currentUser = await getUserByEmail(tokenUser.email);
+      }
+    }
+
+    console.log("CURRENT USER:", currentUser);
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: "No autenticado" },
+        { status: 401 }
+      );
+    }
+
+    const actorUserId = currentUser.userId;
+
+    if (!body.subModuleKey) {
+      return NextResponse.json(
+        { error: "Falta subModuleKey" },
+        { status: 400 }
+      );
+    }
+
+    const permiso = await pool
+      .request()
+      .input("UserId", sql.UniqueIdentifier, actorUserId)
+      .input("SubModuleKey", sql.VarChar(100), body.subModuleKey)
+      .query(`
+        SELECT TOP 1
+          usp.CanView
+        FROM dbo.usuariosSubmodulospermisos usp
+        INNER JOIN dbo.submodulos_dgci s
+          ON s.SubModuleId = usp.SubModuleId
+        WHERE usp.UserId = @UserId
+          AND LOWER(s.SubModuleKey) = LOWER(@SubModuleKey)
+          AND usp.CanView = 1
+      `);
+
+    console.log("PERMISOS:", permiso.recordset);
+
+    if (permiso.recordset.length === 0) {
+      return NextResponse.json(
+        { error: "No tiene permiso para guardar este submódulo" },
+        { status: 403 }
+      );
+    }
+
     const cabecera = await pool
       .request()
       .input("SubModuleKey", sql.VarChar(100), body.subModuleKey)
@@ -22,12 +82,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-   await pool
-  .request()
-  .input("MatrizSistemaAdministrativoId", sql.Int, matrizId)
-  .execute("sp_EliminarDetalleMatrizSistemaAdministrativo");
+    await pool
+      .request()
+      .input("MatrizSistemaAdministrativoId", sql.Int, matrizId)
+      .execute("sp_EliminarDetalleMatrizSistemaAdministrativo");
 
-    // 🔹 3. Insertar preguntas
     for (const p of body.preguntas || []) {
       await pool
         .request()
@@ -49,6 +108,7 @@ export async function POST(req: NextRequest) {
         .input("FechaEmision", sql.Date, p.fechaEmision || null)
         .input("Interna", sql.NVarChar(sql.MAX), p.interna || null)
         .input("Externa", sql.NVarChar(sql.MAX), p.externa || null)
+        .input("ActorUserId", sql.UniqueIdentifier, actorUserId)
         .execute("sp_InsertarMatrizSistemaAdministrativoDetalle");
     }
 
@@ -56,12 +116,14 @@ export async function POST(req: NextRequest) {
       ok: true,
       matrizId,
     });
-
   } catch (error: any) {
     console.error("Error guardando matriz:", error);
 
     return NextResponse.json(
-      { ok: false, message: error.message },
+      {
+        ok: false,
+        message: error.message,
+      },
       { status: 500 }
     );
   }

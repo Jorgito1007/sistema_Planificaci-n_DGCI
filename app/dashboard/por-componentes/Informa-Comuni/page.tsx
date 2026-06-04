@@ -51,6 +51,12 @@ type RegistroPrincipio = {
   preguntas: PreguntaDetalleForm[];
 };
 
+interface Cargo {
+  Id: number;
+  CargoKey: string;
+  NombreCargo: string;
+}
+
 const PRINCIPIOS: Principio[] = [
   { id: 13, titulo: "Principio 13", color: "bg-blue-600", rowColor: "bg-[#cfe2f3]" },
   { id: 14, titulo: "Principio 14", color: "bg-green-600", rowColor: "bg-[#d9ead3]" },
@@ -147,8 +153,14 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
   };
 }
 
+
+
 export default function InformacionComunicacionPage() {
   const SUBMODULE_KEY = "sa_IyC";
+const [cargos, setCargos] = useState<Cargo[]>([]);
+  
+const [isFullAccess, setIsFullAccess] = useState(false);
+const [principiosPermitidos, setPrincipiosPermitidos] = useState<number[]>([]);
 
   const [open, setOpen] = useState(false);
   const [principioActual, setPrincipioActual] = useState<Principio | null>(null);
@@ -160,6 +172,52 @@ export default function InformacionComunicacionPage() {
 
   const [preguntasDetalle, setPreguntasDetalle] = useState<PreguntaDetalleForm[]>([]);
   const [registros, setRegistros] = useState<RegistroPrincipio[]>([]);
+
+//permisos de usuario sobre la edicion de principios
+const cargarPermisosPrincipios = async () => {
+  
+  const res = await fetch(
+    
+    `/api/permisos/principios?subModuleKey=${SUBMODULE_KEY}`,
+    { credentials: "include" }
+    
+  );
+
+  const data = await res.json();
+console.log("PERMISOS PRINCIPIOS:", data);
+  if (!res.ok || !data.ok) return;
+
+  setIsFullAccess(data.isFullAccess);
+
+  const ids = (data.principios || []).map((p: any) =>
+    Number(p.PrincipioId)
+  );
+
+  setPrincipiosPermitidos(ids);
+};
+
+const puedeUsarPrincipio = (principioId: number) => {
+  return (
+    isFullAccess ||
+    principiosPermitidos.includes(Number(principioId))
+  );
+};
+
+async function cargarCargos() {
+  try {
+    const res = await fetch("/api/cargos");
+
+    if (!res.ok) {
+      throw new Error("Error cargando cargos");
+    }
+
+    const data = await res.json();
+
+    setCargos(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
 
   const cargarRegistros = async () => {
     try {
@@ -183,39 +241,47 @@ export default function InformacionComunicacionPage() {
 
   useEffect(() => {
     cargarRegistros();
+    cargarPermisosPrincipios();
+    cargarCargos();
   }, []);
 
   useEffect(() => {
     localStorage.setItem("informacion_comunicacion", JSON.stringify(registros));
   }, [registros]);
 
-  const abrirModal = (principio: Principio) => {
-    setPrincipioActual(principio);
 
-    const existente = registros.find((r) => r.principioId === principio.id);
 
-    if (existente) {
-      setPreguntaGeneral({
-        numero: existente.preguntaGeneral.numero,
-        texto: existente.preguntaGeneral.texto,
-      });
+ const abrirModal = (principio: Principio) => {
+  if (!puedeUsarPrincipio(principio.id)) {
+    return;
+  }
 
-      setPreguntasDetalle(
-        existente.preguntas.map((p) => ({
-          ...p,
-        }))
-      );
-    } else {
-      setPreguntaGeneral({
-        numero: `${principio.id}.`,
-        texto: "",
-      });
+  setPrincipioActual(principio);
 
-      setPreguntasDetalle([crearPreguntaDetalleVacia(principio.id, 1)]);
-    }
+  const existente = registros.find((r) => r.principioId === principio.id);
 
-    setOpen(true);
-  };
+  if (existente) {
+    setPreguntaGeneral({
+      numero: existente.preguntaGeneral.numero,
+      texto: existente.preguntaGeneral.texto,
+    });
+
+    setPreguntasDetalle(
+      existente.preguntas.map((p) => ({
+        ...p,
+      }))
+    );
+  } else {
+    setPreguntaGeneral({
+      numero: `${principio.id}.`,
+      texto: "",
+    });
+
+    setPreguntasDetalle([crearPreguntaDetalleVacia(principio.id, 1)]);
+  }
+
+  setOpen(true);
+};
 
   const agregarPregunta = () => {
     if (!principioActual) return;
@@ -278,6 +344,7 @@ export default function InformacionComunicacionPage() {
     try {
       const res = await fetch("/api/control-interno/guardar", {
         method: "POST",
+        credentials:"include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -323,21 +390,42 @@ export default function InformacionComunicacionPage() {
           demás personal dentro de la Entidad de forma oportuna, útil para cumplir con sus responsabilidades, incluyendo las relacionadas con el Control Interno.
         </p>
       </div>
+<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {PRINCIPIOS.map((principio) => {
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {PRINCIPIOS.map((principio) => (
-          <button
-            key={principio.id}
-            type="button"
-            onClick={() => abrirModal(principio)}
-            className={`${principio.color} rounded-2xl p-5 text-left text-white shadow-md transition hover:scale-[1.02]`}
-          >
-            <h3 className="text-lg font-bold">{principio.titulo}</h3>
-            <p className="mt-2 text-sm opacity-90">Registrar o editar contenido</p>
-          </button>
-        ))}
-      </div>
+    const habilitado = puedeUsarPrincipio(Number(principio.id));
 
+    return (
+      <button
+        key={principio.id}
+        type="button"
+        onClick={() => {
+          if (!habilitado) return;
+
+          abrirModal(principio);
+        }}
+        disabled={!habilitado}
+        className={`rounded-2xl p-5 text-left text-white shadow-md transition
+          ${
+            habilitado
+              ? `${principio.color} hover:scale-[1.02] cursor-pointer`
+              : "bg-gray-400 cursor-not-allowed opacity-60"
+          }
+        `}
+      >
+        <h3 className="text-lg font-bold">
+          {principio.titulo}
+        </h3>
+
+        <p className="mt-2 text-sm opacity-90">
+          {habilitado
+            ? "Registrar o editar contenido"
+            : "Sin permisos"}
+        </p>
+      </button>
+    );
+  })}
+</div>
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-100 px-4 py-3">
           <h3 className="text-base font-semibold text-slate-800">
@@ -462,9 +550,9 @@ export default function InformacionComunicacionPage() {
                         <td className="border px-2 py-2 text-center align-top">{pregunta.numero}</td>
                         <td className="border px-2 py-2 align-top">{pregunta.texto}</td>
 
-                        <td className="border px-2 py-2 align-middle text-center font-medium">
-                          {pregunta.cargo}
-                        </td>
+                      <td className="border px-2 py-2 align-top">
+  {pregunta.cargo || "-"}
+</td>
 
                         <td className="border px-2 py-2 text-center align-top">{pregunta.existe}</td>
                         <td className="border px-2 py-2 text-center align-top">{pregunta.aprobado}</td>
@@ -626,16 +714,25 @@ export default function InformacionComunicacionPage() {
 
 {/* FILA 1 */}
 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
-  <div className="md:col-span-2">
-    <label className="mb-1 block text-sm font-medium">Cargo</label>
-    <input
-      className="w-full rounded-md border px-3 py-2"
-      value={pregunta.cargo}
-      onChange={(e) =>
-        actualizarPreguntaDetalle(index, "cargo", e.target.value)
-      }
-    />
-  </div>
+   <div className="md:col-span-2">
+  <label className="mb-1 block text-sm font-medium">Cargo</label>
+
+  <select
+    className="w-full rounded-md border px-3 py-2"
+    value={pregunta.cargo || ""}
+    onChange={(e) =>
+      actualizarPreguntaDetalle(index, "cargo", e.target.value)
+    }
+  >
+    <option value="">Seleccione un cargo</option>
+
+    {cargos.map((cargo) => (
+      <option key={cargo.Id} value={cargo.NombreCargo}>
+        {cargo.NombreCargo}
+      </option>
+    ))}
+  </select>
+</div>
 
   <CampoBinario label="Existe" value={pregunta.existe} onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)} />
   <CampoBinario label="Aprobado" value={pregunta.aprobado} onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)} />

@@ -5,6 +5,20 @@ import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 
+import { useEffect, useState } from "react";
+import { HoloPulse } from "@/components/ui/holo-pulse-loader";
+
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
+
 export default function ResultadosSistemaAdministrativoPage() {
   const sistemas = [
     "ADMINISTRACIÓN DE LOS RECURSOS HUMANOS",
@@ -19,166 +33,463 @@ export default function ResultadosSistemaAdministrativoPage() {
 
  const reportRef = useRef<HTMLDivElement>(null);
 
-  const exportarPDF = async () => {
-    const input = reportRef.current;
-    if (!input) return;
+ const [data, setData] = useState<any[]>([]);
 
-    const canvas = await html2canvas(input, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
+const [afirmativas, setAfirmativas] = useState<any[]>([]);
+
+useEffect(() => {
+  fetch("/api/resultados/sistemas")
+    .then(res => res.json())
+    .then(setData);
+
+  fetch("/api/resultados/sistemas-detalle")
+    .then(res => res.json())
+    .then((res) => {
+      console.log("AFIRMATIVAS API:", res);
+      setAfirmativas(res);
+    });
+}, []);
+
+type SistemaData = {
+  Sistema: number | string;
+  Promedio: number;
+};
+
+const colores = [
+  "#3b82f6", // azul
+  "#22c55e", // verde
+  "#f59e0b", // naranja
+  "#ef4444", // rojo
+  "#8b5cf6", // morado
+  "#06b6d4", // celeste
+  "#84cc16", // lima
+  "#f97316", // anaranjado
+];
+
+
+const chartData = data.map((item: SistemaData, index: number) => {
+  const codigo = Number(item.Sistema);
+  const nombreSistema = sistemas[codigo - 2] || `Sistema ${codigo}`;
+
+
+
+
+  return {
+    sistemaCorto:
+      nombreSistema.length > 22
+        ? nombreSistema.substring(0, 22) + "..."
+        : nombreSistema,
+    sistema: nombreSistema,
+    valor: Number(item.Promedio) || 0,
+    color: colores[index % colores.length],
+  };
+});
+
+// CONTROL INTERNO GLOBAL DE LOS SISTEMAS DE INFORMACIÓN
+const calificacionesGlobales = data.map((item) =>
+  Number(item.Promedio || 0)
+);
+
+const calificacionGlobal = (
+  calificacionesGlobales.reduce((acc, val) => acc + val, 0) /
+  calificacionesGlobales.length
+).toFixed(2);
+
+const nivelGlobal =
+  Number(calificacionGlobal) === 5
+    ? "Alto"
+    : Number(calificacionGlobal) >= 3
+    ? "Medio"
+    : "Bajo";
+
+const porcentajeGlobal = `${((Number(calificacionGlobal) / 5) * 100).toFixed(2)}%`;
+
+
+//NIVEL DE CUMPLIMEINTO DE LAS PREGUNTAS EVALUADAS DE LOS S.A//
+  const resumenNiveles = {
+    Alto: Array(8).fill(0),
+    Medio: Array(8).fill(0),
+    Bajo: Array(8).fill(0),
+  };
+
+  data.forEach((item: any) => {
+    const sistema = Number(item.Sistema);
+    const index = sistema - 2;
+
+    if (index < 0 || index > 7) return;
+
+    const valor = Number(item.Promedio || 0);
+
+    if (valor === 5) {
+      resumenNiveles.Alto[index]++;
+    } else if (valor >= 3) {
+      resumenNiveles.Medio[index]++;
+    } else {
+      resumenNiveles.Bajo[index]++;
+    }
+  });
+
+  const totalFila = (fila: number[]) =>
+    fila.reduce((acc, val) => acc + val, 0);
+
+  const totalColumna = (i: number) =>
+    resumenNiveles.Alto[i] +
+    resumenNiveles.Medio[i] +
+    resumenNiveles.Bajo[i];
+
+const totalGeneralNiveles: number = Array.from({ length: 8 }).reduce(
+  (acc: number, _: unknown, i: number) => acc + totalColumna(i),
+  0
+);
+
+
+// RESPUESTAS AFIRMATIVAS DE LAS PREGUNTAS EVALUADAS
+function getAfirmativa(index: number) {
+  const sistema = index + 2;
+  return afirmativas.find((a: any) => Number(a.Sistema) === sistema);
+}
+
+const totalPresente = afirmativas.reduce(
+  (acc, cur) => acc + Number(cur.TotalPresente || 0),
+  0
+);
+
+const totalFuncionando = afirmativas.reduce(
+  (acc, cur) => acc + Number(cur.TotalFuncionando || 0),
+  0
+);
+
+const CustomTooltip = ({ active, payload }: any) => {
+  if (!active || !payload || !payload.length) return null;
+
+  const dato = payload[0]?.payload;
+
+
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-lg">
+      <p className="mb-1 text-sm font-semibold text-gray-800">
+        {dato?.sistema}
+      </p>
+      <p className="text-sm text-gray-600">
+        Calificación obtenida:{" "}
+        <span className="font-bold">
+          {Number(dato?.valor || 0).toFixed(2)}
+        </span>
+      </p>
+    </div>
+  );
+};
+
+const promedioGeneral = (
+  data.reduce((acc, cur) => acc + (Number(cur.Promedio) || 0), 0) / 8
+).toFixed(2);
+
+
+const [exportandoPDF, setExportandoPDF] = useState(false);
+
+const sistemaMap = [2, 3, 4, 5, 6, 7, 8, 9];
+
+const [periodoInicio, setPeriodoInicio] = useState("");
+const [periodoFin, setPeriodoFin] = useState("");
+
+function getSistemaData(index: number) {
+  const sistema = index + 2;
+  return data.find((d) => Number(d.Sistema) === sistema);
+}
+console.log("DATA API:", data);
+
+
+//Exportar a PDF
+const exportarPDF = async () => {
+  const input = reportRef.current;
+  if (!input) return;
+  
+setExportandoPDF(true);
+  const pdf = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "legal",
+    compress: true,
+  });
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  const margin = 10;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+
+  let currentY = margin;
+
+  const sections = input.querySelectorAll(".pdf-section");
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i] as HTMLElement;
+
+    const isWide = section.classList.contains("pdf-wide-section");
+
+    const sectionWidth = isWide
+      ? Math.max(section.scrollWidth, section.offsetWidth, 1350)
+      : section.offsetWidth;
+
+    const originalWidth = section.style.width;
+    const originalMaxWidth = section.style.maxWidth;
+    const originalOverflow = section.style.overflow;
+
+    try {
+      if (isWide) {
+        section.style.width = `${sectionWidth}px`;
+        section.style.maxWidth = "none";
+        section.style.overflow = "visible";
+      }
+
+      const canvas = await html2canvas(section, {
+        scale: isWide ? 2 : 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        width: sectionWidth,
+        windowWidth: sectionWidth,
+      });
+
+      const imgData = canvas.toDataURL("image/png", 1.0);
+
+const pxToMm = 0.264583;
+
+const imgWidth = isWide
+  ? usableWidth
+  : Math.min(canvas.width * pxToMm / 3, usableWidth);
+
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      if (currentY + imgHeight > usableHeight + margin) {
+        pdf.addPage();
+        currentY = margin;
+      }
+
+      const imgX = isWide
+        ? margin
+        : (pageWidth - imgWidth) / 2;
+
+      pdf.addImage(
+        imgData,
+        "PNG",
+        imgX,
+        currentY,
+        imgWidth,
+        imgHeight,
+        undefined,
+        "FAST"
+      );
+
+      currentY += imgHeight + 8;
+    } finally {
+   
+      section.style.width = originalWidth;
+      section.style.maxWidth = originalMaxWidth;
+      section.style.overflow = originalOverflow;
+    }
+  }
+
+  const totalPages = pdf.getNumberOfPages();
+
+  for (let i = 1; i <= totalPages; i++) {
+    pdf.setPage(i);
+    pdf.setFontSize(9);
+
+    pdf.text(
+      `Página ${i} de ${totalPages}`,
+      pageWidth - 40,
+      pageHeight - 5
+    );
+  }
+   setExportandoPDF(false);
+  pdf.save("Informe_Control_Interno.pdf");
+};
+
+//Exportar a excel
+/*const exportarExcel = () => {
+  const input = reportRef.current;
+  if (!input) return;
+
+  const cloned = input.cloneNode(true) as HTMLElement;
+
+  // Copiar estilos reales de pantalla
+  const copiarEstilos = (original: Element, copia: Element) => {
+    const style = window.getComputedStyle(original as HTMLElement);
+
+    const props = [
+      "background-color",
+      "color",
+      "font-size",
+      "font-weight",
+      "font-family",
+      "text-align",
+      "vertical-align",
+      "border",
+      "border-top",
+      "border-right",
+      "border-bottom",
+      "border-left",
+      "padding",
+      "width",
+      "height",
+    ];
+
+    props.forEach((prop) => {
+      (copia as HTMLElement).style.setProperty(
+        prop,
+        style.getPropertyValue(prop)
+      );
     });
 
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    const imgWidth = pdfWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pdfHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-    }
-
-    pdf.save("informe_sistemas_administracion.pdf");
+    Array.from(original.children).forEach((child, index) => {
+      const clonedChild = copia.children[index];
+      if (clonedChild) copiarEstilos(child, clonedChild);
+    });
   };
 
-  const exportarExcel = () => {
-    const wb = XLSX.utils.book_new();
+  copiarEstilos(input, cloned);
 
-    const hojaResumen = XLSX.utils.aoa_to_sheet([
-      ["INFORME DE EVALUACIÓN DE CONTROL INTERNO DE LOS SISTEMAS DE ADMINISTRACIÓN"],
-      [],
-      ["INSTITUCIÓN:", ""],
-      ["PERIODO:", ""],
-      [],
-      ["CONTROL INTERNO GLOBAL DE LOS SISTEMAS DE ADMINISTRACIÓN"],
-      ["", "Calificación obtenida", "Nivel", "% Cumplimiento (Nota 1)"],
-      ["", "", "", ""],
-    ]);
+  // Quitar botones, inputs y controles
+  cloned.querySelectorAll("button, select, textarea").forEach((el) => {
+    el.remove();
+  });
 
-    const hojaCumplimiento = XLSX.utils.aoa_to_sheet([
-      ["Nivel de Cumplimiento del Control Interno de los Sistemas de Administración"],
-      [],
-      ["No", "Sistema de Administración", "Puntaje máximo", "Calificación obtenida", "Nivel", "% cumplimiento (Nota 1)"],
-      [1, "ADMINISTRACIÓN DE LOS RECURSOS HUMANOS", 5, "", "", ""],
-      [2, "PLANEACIÓN Y PROGRAMACIÓN", 5, "", "", ""],
-      [3, "PRESUPUESTO", 5, "", "", ""],
-      [4, "ADMINISTRACIÓN FINANCIERA", 5, "", "", ""],
-      [5, "CONTABILIDAD INTEGRADA", 5, "", "", ""],
-      [6, "CONTRATACIÓN Y ADMINISTRACIÓN DE BIENES Y SERVICIOS", 5, "", "", ""],
-      [7, "INVERSIONES EN PROGRAMAS Y PROYECTOS", 5, "", "", ""],
-      [8, "TECNOLOGÍA DE LA INFORMACIÓN (TI)", 5, "", "", ""],
-      ["", "TOTAL", "", "", "", ""],
-    ]);
+  cloned.querySelectorAll("input").forEach((el) => {
+    const inputEl = el as HTMLInputElement;
+    const span = document.createElement("span");
+    span.textContent = inputEl.value || "";
+    el.replaceWith(span);
+  });
 
-    const hojaPreguntas = XLSX.utils.aoa_to_sheet([
-      ["Nivel de Cumplimiento de las preguntas evaluadas de los Sistemas de Administración"],
-      [],
-      ["Valor", "Nivel", "RH", "Planeación", "Presupuesto", "Adm. Financiera", "Cont. Integrada", "Bienes y Servicios", "Inversiones", "TI", "TOTAL"],
-      ["[5]", "Alto", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["[3 - 4]", "Medio", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["[0 - 2]", "Bajo", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["", "TOTAL", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ]);
+  // Quitar gráficos para que Excel no se deforme
+  cloned.querySelectorAll("svg, canvas, .recharts-wrapper").forEach((el) => {
+    el.remove();
+  });
 
-    const hojaAfirmativas = XLSX.utils.aoa_to_sheet([
-      ["Respuestas Afirmativas de las Preguntas Evaluadas por cada Sistema de Administración"],
-      [],
-      ["", "RH", "Planeación", "Presupuesto", "Adm. Financiera", "Cont. Integrada", "Bienes y Servicios", "Inversiones", "TI", "Total preguntas afirmativas"],
-      ["Está Presente (Nota 2)", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["Resultado", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["Está Funcionando (Nota 2)", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      ["Resultado", 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      [],
-      ["Conclusiones:"],
-      [""],
-      [""],
-      ["Recomendaciones:"],
-      [""],
-      [""],
-      [],
-      ["Fecha:", ""],
-    ]);
+  // Corregir textos verticales / columnas estrechas
+  cloned.querySelectorAll("*").forEach((el) => {
+    const item = el as HTMLElement;
+    item.style.whiteSpace = "normal";
+    item.style.wordBreak = "normal";
+    item.style.overflow = "visible";
+    item.style.height = "auto";
+    item.style.minHeight = "0";
+    item.style.maxHeight = "none";
+  });
 
-    hojaCumplimiento["!cols"] = [
-      { wch: 6 },
-      { wch: 45 },
-      { wch: 16 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 18 },
-    ];
+  // Reemplazar firmas para Excel
+  const fecha = new Date().toLocaleDateString();
 
-    hojaPreguntas["!cols"] = [
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 10 },
-      { wch: 10 },
-    ];
+  const firmasExcel = document.createElement("table");
+  firmasExcel.style.width = "100%";
+  firmasExcel.style.borderCollapse = "collapse";
 
-    hojaAfirmativas["!cols"] = [
-      { wch: 24 },
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 10 },
-      { wch: 18 },
-    ];
+  firmasExcel.innerHTML = `
+    <tr>
+      <td style="border:none;text-align:center;font-weight:bold;padding-top:30px;">
+        ____________________<br/>ELABORADO POR:
+      </td>
+      <td style="border:none;text-align:center;font-weight:bold;padding-top:30px;">
+        ____________________<br/>REVISADO POR:
+      </td>
+      <td style="border:none;text-align:center;font-weight:bold;padding-top:30px;">
+        ____________________<br/>APROBADO POR:
+      </td>
+    </tr>
+    <tr>
+      <td colspan="3" style="border:none;padding-top:20px;text-align:left;">
+        <table style="border-collapse:collapse;width:260px;">
+          <tr>
+            <td style="border:1px solid #000;font-weight:bold;text-align:center;width:100px;padding:4px;">
+              FECHA:
+            </td>
+            <td style="border:1px solid #000;text-align:center;width:160px;padding:4px;">
+              ${fecha}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  `;
 
-    XLSX.utils.book_append_sheet(wb, hojaResumen, "Resumen");
-    XLSX.utils.book_append_sheet(wb, hojaCumplimiento, "Cumplimiento");
-    XLSX.utils.book_append_sheet(wb, hojaPreguntas, "Preguntas");
-    XLSX.utils.book_append_sheet(wb, hojaAfirmativas, "Afirmativas");
+  const firmasOriginal = cloned.querySelector(".excel-firmas");
+  if (firmasOriginal) {
+    firmasOriginal.replaceWith(firmasExcel);
+  }
 
-    XLSX.writeFile(wb, "informe_sistemas_administracion.xlsx");
-  };
+  const html = `
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+          }
 
+          table {
+            border-collapse: collapse;
+          }
+
+          th, td {
+            border: 1px solid #000;
+            padding: 6px;
+            text-align: center;
+            vertical-align: middle;
+            mso-number-format: "\\@";
+          }
+
+          .pdf-section {
+            margin-bottom: 18px;
+          }
+        </style>
+      </head>
+
+      <body>
+        ${cloned.innerHTML}
+      </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "Informe_Control_Interno.xls";
+
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};*/
 
   return (
 
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap gap-2">
-        <button
-          onClick={exportarPDF}
-          className="rounded bg-red-600 px-4 py-2 text-white"
-        >
-          Exportar PDF
-        </button>
-
-        <button
-          onClick={exportarExcel}
-          className="rounded bg-green-600 px-4 py-2 text-white"
-        >
-          Exportar Excel
-        </button>
+   <button
+        onClick={exportarPDF}
+        disabled={exportandoPDF}
+        className="rounded bg-red-600 px-4 py-2 text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {exportandoPDF ? "Exportando..." : "Exportar PDF"}
+      </button>
       </div>
 
-      <div ref={reportRef} className="bg-white p-4">
-        <div className="space-y-6  p-6 text-black">
-      <div className="border-2 border-black">
+      
+
+     <div ref={reportRef} className="bg-white">
+  <div className="space-y-4 text-black">
+      <div className="border-2 border-black  pdf-section pdf-wide-section">
         <div className="border-b-2 border-black px-4 py-3 text-center text-xl font-bold uppercase">
           INFORME DE EVALUACIÓN DE CONTROL INTERNO DE LOS SISTEMAS DE
           ADMINISTRACIÓN
@@ -188,21 +499,40 @@ export default function ResultadosSistemaAdministrativoPage() {
           <div className="col-span-3 border-r border-black px-3 py-2 text-center font-bold uppercase">
             INSTITUCIÓN:
           </div>
-          <div className="col-span-9 px-3 py-2">UNIVERSIDAD NACIONAL CASIMIRO SOTELO MONTENEGRO</div>
+          <div className="col-span-9 px-3 py-2 ">UNIVERSIDAD NACIONAL CASIMIRO SOTELO MONTENEGRO</div>
         </div>
 
-        <div className="grid grid-cols-12">
-          <div className="col-span-3 border-r border-black px-3 py-2 text-center font-bold uppercase">
-            PERIODO:
-          </div>
-          <div className="col-span-9 px-3 py-2"></div>
-        </div>
+       <div className="grid grid-cols-12">
+  <div className="col-span-3 border-r border-black px-3 py-2 text-center font-bold uppercase">
+    PERIODO:
+  </div>
+
+  <div className="col-span-9 flex items-center gap-3 px-3 py-2">
+    <span>Del</span>
+
+    <input
+      type="date"
+      value={periodoInicio}
+      onChange={(e) => setPeriodoInicio(e.target.value)}
+      className="rounded border px-2 py-1"
+    />
+
+    <span>al</span>
+
+    <input
+      type="date"
+      value={periodoFin}
+      onChange={(e) => setPeriodoFin(e.target.value)}
+      className="rounded border px-2 py-1"
+    />
+  </div>
+</div>
       </div>
 
-      <div className="grid grid-cols-14 gap-4">
+      <div className="grid grid-cols-14 gap-4 pdf-section pdf-wide-section">
         <div className="col-span-12 lg:col-span-7 border-2 border-black">
-          <div className="grid grid-cols-12">
-            <div className="col-span-6 border-r-2 border-b-2 border-black bg-[#efe3ba] px-4 py-6 text-center text-lg font-bold uppercase">
+          <div className="grid grid-cols-12 ">
+            <div className="col-span-6 border-r-2 border-b-2 border-black bg-[#efe3ba] px-2 py-2 text-center text-lg font-bold uppercase ">
               CONTROL INTERNO GLOBAL DE LOS SISTEMAS DE ADMINISTRACIÓN
             </div>
 
@@ -221,16 +551,35 @@ export default function ResultadosSistemaAdministrativoPage() {
             </div>
           </div>
 
-          <div className="grid min-h-[90px] grid-cols-12">
-            <div className="col-span-6 border-r-2 border-black bg-[#f6edc7]"></div>
-            <div className="col-span-2 border-r-2 border-black bg-white"></div>
-            <div className="col-span-2 border-r-2 border-black bg-white"></div>
-            <div className="col-span-2 bg-white"></div>
-          </div>
+         <div className="grid min-h-[90px] grid-cols-12">
+  <div className="col-span-6 border-r-2 border-black bg-[#f6edc7]"></div>
+
+  <div className="col-span-2 border-r-2 border-black bg-white flex items-center justify-center text-lg font-bold">
+    {calificacionGlobal}
+  </div>
+
+  <div
+    className={`col-span-2 border-r-2 border-black flex items-center justify-center text-lg font-bold ${
+      nivelGlobal === "Alto"
+        ? "bg-green-500 text-white"
+        : nivelGlobal === "Medio"
+        ? "bg-yellow-400 text-black"
+        : nivelGlobal === "Bajo"
+        ? "bg-red-500 text-white"
+        : "bg-white text-black"
+    }`}
+  >
+    {nivelGlobal}
+  </div>
+
+  <div className="col-span-2 bg-white flex items-center justify-center text-lg font-bold">
+    {porcentajeGlobal}
+  </div>
+</div>
         </div>
       </div>
 
-      <div className="border-0">
+      <div className="border-0 pdf-section pdf-wide-section">
         <div className="border-b-2 bg-[#dce7d4] px-4 py-2 text-center text-lg font-bold">
           Nivel de Cumplimiento del Control Interno de los Sistemas de
           Administración
@@ -260,18 +609,46 @@ export default function ResultadosSistemaAdministrativoPage() {
             </tr>
           </thead>
           <tbody>
-            {sistemas.map((sistema, index) => (
-              <tr key={sistema}>
-                <td className="border border-black px-2 py-1 text-center">
-                  {index + 1}
-                </td>
-                <td className="border border-black px-2 py-1">{sistema}</td>
-                <td className="border border-black px-2 py-1 text-center">5</td>
-                <td className="border border-black px-2 py-1 text-center"></td>
-                <td className="border border-black px-2 py-1 text-center"></td>
-                <td className="border border-black px-2 py-1 text-center"></td>
-              </tr>
-            ))}
+  {sistemas.map((sistema, index) => {
+  const sistemaData = getSistemaData(index);
+  const val = Number(sistemaData?.Promedio ?? 0);
+
+
+  
+  console.log("Sistema buscado:", index + 2, "Encontrado:", sistemaData);
+
+  return (
+    <tr key={sistema}>
+      <td className="border border-black px-2 py-1 text-center">
+        {index + 1}
+      </td>
+
+      <td className="border border-black px-2 py-1">{sistema}</td>
+
+      <td className="border border-black px-2 py-1 text-center">5</td>
+
+      <td className="border border-black px-2 py-1 text-center">
+        {val.toFixed(2)}
+      </td>
+
+    <td
+  className={`border border-black px-2 py-1 text-center font-bold ${
+    val === 5
+      ? "bg-green-500 text-white"
+      : val >= 3
+      ? "bg-yellow-400 text-black"
+      : "bg-red-500 text-white"
+  }`}
+>
+  {val === 5 ? "Alto" : val >= 3 ? "Medio" : "Bajo"}
+</td>
+
+      <td className="border border-black px-2 py-1 text-center">
+        {((val / 5) * 100).toFixed(2)}%
+      </td>
+    </tr>
+  );
+})}
 
             <tr>
               <td
@@ -280,7 +657,11 @@ export default function ResultadosSistemaAdministrativoPage() {
               >
                 TOTAL
               </td>
-              <td className="border border-black px-2 py-2 text-center font-bold"></td>
+<td className="border border-black px-2 py-2 text-center font-bold">
+  {(
+    data.reduce((acc, cur) => acc + (((cur.Promedio || 0) / 5) * 100), 0) / 8
+  ).toFixed(2)}%
+</td>
             </tr>
           </tbody>
         </table>
@@ -292,16 +673,46 @@ export default function ResultadosSistemaAdministrativoPage() {
         </div>
       </div>
 
-      <div className="border-2 border-black p-4">
-        <div className="mb-3 text-center text-xl font-bold">
-          Valoración por sistema de administración
-        </div>
-        <div className="flex min-h-[420px] items-center justify-center border-2 border-dashed border-gray-400 bg-gray-50 text-gray-500">
-          Aquí se colocará el gráfico posteriormente
-        </div>
-      </div>
+     <div className="border-2 border-black p-4 pdf-section pdf-wide-section ">
+  <div className="mb-3 text-center text-xl font-bold">
+    Valoración por sistema de administración
+  </div>
 
-      <div className="border-0">
+
+  <div className="h-[500px] w-full">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart
+        data={chartData}
+        margin={{ top: 10, right: 10, left: 0, bottom: 70 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+
+      <XAxis
+  dataKey="sistemaCorto"
+  angle={-10} // 🔽 menos inclinación
+  textAnchor="end"
+  interval={0}
+  height={70} // 🔽 menos altura
+  tick={{ fontSize: 10 }} // 🔽 más pequeño
+/>
+
+        <YAxis domain={[0, 5]} tick={{ fontSize: 12 }} />
+
+        <Tooltip content={<CustomTooltip />} />
+
+        <Bar dataKey="valor" radius={[8, 8, 0, 0]} barSize={45}>
+          {chartData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+</div>
+
+
+
+      <div className="border-0 pdf-section pdf-wide-section">
         <div className="border-b-2 border-black px-4 py-2 text-center text-xl font-bold">
           Nivel de Cumplimiento de las preguntas evaluadas de los Sistemas de
           Administración
@@ -317,7 +728,7 @@ export default function ResultadosSistemaAdministrativoPage() {
           </div>
         </div>
 
-        <table className="w-full border-collapse text-sm">
+        <table className="pdf-wide-table w-full border-collapse text-sm">
           <thead>
             <tr className="bg-[#dce7d4]">
               <th className="border border-black px-3 py-2 text-center">
@@ -377,68 +788,77 @@ export default function ResultadosSistemaAdministrativoPage() {
               </th>
             </tr>
           </thead>
+          
           <tbody>
-            <tr>
-              <td className="border border-black bg-[#00ff00] px-2 py-2 text-center font-bold">
-                [5]
-              </td>
-              <td className="border border-black bg-[#00aa00] px-2 py-2 text-center text-white">
-                Alto
-              </td>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <td key={i} className="border border-black px-2 py-2 text-center">
-                  0
-                </td>
-              ))}
-              <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center"></td>
-            </tr>
+  <tr>
+    <td className="border border-black bg-[#00ff00] px-2 py-2 text-center font-bold">
+      [5]
+    </td>
+    <td className="border border-black bg-[#00aa00] px-2 py-2 text-center text-white">
+      Alto
+    </td>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <td key={i} className="border border-black px-2 py-2 text-center">
+        {resumenNiveles.Alto[i]}
+      </td>
+    ))}
+    <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center font-bold">
+      {totalFila(resumenNiveles.Alto)}
+    </td>
+  </tr>
 
-            <tr>
-              <td className="border border-black bg-[#ffff00] px-2 py-2 text-center font-bold">
-                [3 - 4]
-              </td>
-              <td className="border border-black bg-[#ffe600] px-2 py-2 text-center">
-                Medio
-              </td>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <td key={i} className="border border-black px-2 py-2 text-center">
-                  0
-                </td>
-              ))}
-              <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center"></td>
-            </tr>
+  <tr>
+    <td className="border border-black bg-[#ffff00] px-2 py-2 text-center font-bold">
+      [3 - 4]
+    </td>
+    <td className="border border-black bg-[#ffe600] px-2 py-2 text-center">
+      Medio
+    </td>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <td key={i} className="border border-black px-2 py-2 text-center">
+        {resumenNiveles.Medio[i]}
+      </td>
+    ))}
+    <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center font-bold">
+      {totalFila(resumenNiveles.Medio)}
+    </td>
+  </tr>
 
-            <tr>
-              <td className="border border-black bg-[#ff0000] px-2 py-2 text-center font-bold text-white">
-                [0 - 2]
-              </td>
-              <td className="border border-black bg-[#ff1a1a] px-2 py-2 text-center text-white">
-                Bajo
-              </td>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <td key={i} className="border border-black px-2 py-2 text-center">
-                  0
-                </td>
-              ))}
-              <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center"></td>
-            </tr>
+  <tr>
+    <td className="border border-black bg-[#ff0000] px-2 py-2 text-center font-bold text-white">
+      [0 - 2]
+    </td>
+    <td className="border border-black bg-[#ff1a1a] px-2 py-2 text-center text-white">
+      Bajo
+    </td>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <td key={i} className="border border-black px-2 py-2 text-center">
+        {resumenNiveles.Bajo[i]}
+      </td>
+    ))}
+    <td className="border border-black bg-[#d9eaf7] px-2 py-2 text-center font-bold">
+      {totalFila(resumenNiveles.Bajo)}
+    </td>
+  </tr>
 
-            <tr className="bg-[#d9eaf7] font-bold">
-              <td colSpan={2} className="border border-black px-2 py-2 text-center">
-                TOTAL
-              </td>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <td key={i} className="border border-black px-2 py-2 text-center">
-                  0
-                </td>
-              ))}
-              <td className="border border-black px-2 py-2 text-center"></td>
-            </tr>
-          </tbody>
+  <tr className="bg-[#d9eaf7] font-bold">
+    <td colSpan={2} className="border border-black px-2 py-2 text-center">
+      TOTAL
+    </td>
+    {Array.from({ length: 8 }).map((_, i) => (
+      <td key={i} className="border border-black px-2 py-2 text-center">
+        {totalColumna(i)}
+      </td>
+    ))}
+    <td className="border border-black px-2 py-2 text-center">
+  {totalGeneralNiveles}
+</td>
+  </tr>
+</tbody>
         </table>
       </div>
 
-      <div className="border-0">
+      <div className="border-0 pdf-section pdf-wide-section">
         <div className="px-4 py-3 text-center text-xl font-bold">
           Respuestas Afirmativas de las Preguntas Evaluadas por cada Sistema de
           Administración
@@ -457,7 +877,7 @@ export default function ResultadosSistemaAdministrativoPage() {
 <div className="grid grid-cols-12 gap-3 p-3">
 <div className="col-span-12">
      <div >
-      <table className="border-collapse text-sm">
+      <table className="pdf-wide-table w-full border-collapse text-sm">
         <thead>
           <tr>
             <th className="w-[120px] border-none bg-transparent p-0"></th>
@@ -539,18 +959,18 @@ export default function ResultadosSistemaAdministrativoPage() {
               (Nota 2)
             </td>
 
-            {Array.from({ length: 8 }).map((_, i) => (
-              <td
-                key={`presente-1-${i}`}
-                className="border-2 border-black bg-[#d9e4f5] px-2 py-2 text-center"
-              >
-                0
-              </td>
-            ))}
-
-            <td className="border-2 border-black bg-[#d9e4f5] px-2 py-2 text-center font-bold">
-              0
-            </td>
+{Array.from({ length: 8 }).map((_, i) => (
+  <td
+    key={`presente-1-${i}`}
+    className="border-2 border-black bg-[#d9e4f5] px-2 py-2 text-center"
+  >
+    {getAfirmativa(i)?.TotalPresente ?? 0}
+  </td>
+))}
+          
+<td className="border-2 border-black bg-[#d9e4f5] px-2 py-2 text-center font-bold">
+  {totalPresente}
+</td>
 
             <td
               rowSpan={2}
@@ -585,18 +1005,18 @@ export default function ResultadosSistemaAdministrativoPage() {
               (Nota 2)
             </td>
 
-            {Array.from({ length: 8 }).map((_, i) => (
-              <td
-                key={`funciona-1-${i}`}
-                className="border-2 border-black bg-[#dfead7] px-2 py-2 text-center"
-              >
-                0
-              </td>
-            ))}
+{Array.from({ length: 8 }).map((_, i) => (
+  <td
+    key={`funciona-1-${i}`}
+    className="border-2 border-black bg-[#dfead7] px-2 py-2 text-center"
+  >
+    {getAfirmativa(i)?.TotalFuncionando ?? 0}
+  </td>
+))}
 
-            <td className="border-2 border-black bg-[#dfead7] px-2 py-2 text-center font-bold">
-              0
-            </td>
+           <td className="border-2 border-black bg-[#dfead7] px-2 py-2 text-center font-bold">
+  {totalFuncionando}
+</td>
 
             <td
               rowSpan={2}
@@ -641,7 +1061,7 @@ export default function ResultadosSistemaAdministrativoPage() {
         
       </div>
 
-       <div className="col-span-12 xl:col-span-2">
+       <div className="col-span-12 xl:col-span-2 pdf-section pdf-wide-section">
   <div className="border-2 border-black">
     <div className="border-b-2 border-black bg-[#d9eaf7] px-3 py-2 text-center font-bold">
       Sistemas de Administración
@@ -682,7 +1102,7 @@ export default function ResultadosSistemaAdministrativoPage() {
   </div>
 </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 pdf-section pdf-wide-section">
   <div className="border-2 border-black">
     <div className="border-b border-black px-3 py-2 font-bold">
       Conclusiones:
@@ -706,7 +1126,7 @@ export default function ResultadosSistemaAdministrativoPage() {
   </div>
 </div>
 
-      <div className="grid grid-cols-1 gap-10 pt-10 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-10 pt-10 md:grid-cols-3 pdf-section pdf-wide-section">
         <div className="text-center">
           <div className="mx-auto mb-2 h-[2px] w-[180px] bg-black"></div>
           <div className="font-bold uppercase">ELABORADO POR:</div>
@@ -723,23 +1143,31 @@ export default function ResultadosSistemaAdministrativoPage() {
         </div>
       </div>
 
-      <div className="w-[260px] border-2 border-black">
+ <div className="w-[260px] border border-black pdf-section ">
   <div className="grid grid-cols-12">
-    <div className="col-span-5 border-r-2 border-black px-3 py-1 text-center font-bold uppercase">
+    
+    <div className="col-span-5 border-r border-black px-3 py-1 text-center font-bold uppercase">
       FECHA:
     </div>
 
-    <div className="col-span-7 px-2 py-1">
-      <input
-        type="date"
-        className="w-full outline-none border-none text-center"
-      />
+    <div className="col-span-7 px-3 py-1 text-center">
+      {new Date().toLocaleDateString()}
     </div>
+
   </div>
 </div>
+
     </div>
  
       </div>
+
+       {/* LOADER */}
+    {exportandoPDF && (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30 backdrop-blur-sm">
+        <HoloPulse />
+      </div>
+    )}
+
     </div>
     
     ); 

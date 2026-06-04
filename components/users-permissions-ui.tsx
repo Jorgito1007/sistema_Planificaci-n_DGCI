@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2,Eye, EyeOff } from "lucide-react";
 import Swal from "sweetalert2";
+
 type UserRow = {
   id: string;
   email: string;
@@ -25,24 +26,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const ROLE_LABEL: Record<string, string> = {
-  administrador: "Administrador",
-  director: "Director",
-  asesor: "Asesor",
-};
+
+
 
 export function UsersPermissionsUI() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
-
+const [openSubmoduleId, setOpenSubmoduleId] = useState<string | null>(null);
 
 async function openEdit(u: UserRow) {
   setEditTarget(u);
 
-  // llenar campos
   setForm({
     full_name: u.full_name ?? "",
     email: u.email ?? "",
@@ -51,55 +49,136 @@ async function openEdit(u: UserRow) {
     is_active: !!u.is_active,
   });
 
-  // ✅ esperar a que modules estén cargados
-  if (!modules || modules.length === 0) {
-    await loadModules();
+  let workingModules: ModuleRow[] = modules ?? [];
+
+  if (workingModules.length === 0) {
+    workingModules = await loadModules();
   }
 
-  // reset permisos a false
   const ma: Record<string, boolean> = {};
   const sa: Record<string, boolean> = {};
+  const pa: Record<string, boolean> = {};
+  const qa: Record<string, boolean> = {};
 
-  for (const m of modules) {
+  for (const m of workingModules) {
     ma[String(m.id)] = false;
-    for (const s of m.submodules || []) sa[String(s.id)] = false;
-  }
-console.log("EDIT USER:", { id: u.id, email: u.email });
-  // traer permisos reales
-  const res = await fetch(`/api/admin/users/${u.id}/permissions`, { cache: "no-store" });
-  const data = await res.json();
 
-  console.log("PERMISSIONS API:", data); // ✅ mira esto en consola
+    for (const s of m.submodules || []) {
+      const sk = subKey(String(m.id), String(s.id));
+      sa[sk] = false;
 
- if (res.ok) {
-    console.log("Permisos desde API:", data.permissions);
-  for (const p of data.permissions || []) {
-    const canView =
-      p.CanView === true ||
-      p.CanView === 1 ||
-      p.CanView === "1";
+      for (const p of s.principles || []) {
+        const pk = principleKey(String(m.id), String(s.id), String(p.id));
+        pa[pk] = false;
+      }
 
-    if (canView) {
-      sa[String(p.SubModuleId)] = true;
+      for (const q of s.questions || []) {
+        const qk = questionKey(String(m.id), String(s.id), String(q.id));
+        qa[qk] = false;
+      }
     }
   }
 
-  // activar módulo si tiene al menos 1 submódulo activo
-  for (const m of modules) {
-    const hasAny = (m.submodules || []).some((s) => sa[String(s.id)]);
-    ma[String(m.id)] = hasAny;
+  const res = await fetch(`/api/admin/users/${u.id}/permissions`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const data = await res.json();
+
+ if (res.ok) {
+
+
+  // marcar módulos permitidos
+for (const pp of data.principlePermissions || []) {
+  const subModuleId = String(pp.SubModuleId ?? pp.subModuleId ?? "");
+  const principioId = String(pp.PrincipioId ?? pp.principioId ?? "");
+
+  const canView =
+    pp.CanView === true ||
+    pp.CanView === 1 ||
+    pp.CanView === "1" ||
+    pp.canView === true ||
+    pp.canView === 1 ||
+    pp.canView === "1";
+
+  if (!subModuleId || !principioId || !canView) continue;
+
+  for (const m of workingModules) {
+    const moduleId = String(m.id);
+
+    const exists = (m.submodules || []).some(
+      (s) => String(s.id) === subModuleId
+    );
+
+    if (exists) {
+      const pk = principleKey(moduleId, subModuleId, principioId);
+
+      pa[pk] = true;
+      sa[subKey(moduleId, subModuleId)] = true;
+      ma[moduleId] = true;
+    }
   }
 }
 
-  setSubmoduleAccess(sa);
-  setModuleAccess(ma);
+  // marcar submódulos permitidos
+  for (const p of data.permissions || []) {
+    const subModuleId = String(
+      p.SubModuleId ??
+      p.subModuleId ??
+      p.submoduleId ??
+      p.submoduleid ??
+      ""
+    );
 
+    const canView =
+      p.CanView === true ||
+      p.CanView === 1 ||
+      p.CanView === "1" ||
+      p.canView === true ||
+      p.canView === 1 ||
+      p.canView === "1";
+
+    if (!subModuleId || !canView) continue;
+
+    for (const m of workingModules) {
+      const moduleId = String(m.id);
+
+      const exists = (m.submodules || []).some(
+        (s) => String(s.id) === subModuleId
+      );
+
+      if (exists) {
+        const sk = subKey(moduleId, subModuleId);
+
+        sa[sk] = true;
+        ma[moduleId] = true;
+
+        console.log("SUBMODULO MARCADO:", sk);
+      }
+    }
+  }
+}
+  setModuleAccess(ma);
+  setSubmoduleAccess(sa);
+  setPrincipleAccess(pa);
+  setQuestionAccess(qa);
+
+  const firstAllowedSubmodule =
+    Object.entries(sa).find(([, allowed]) => allowed)?.[0] ?? null;
+
+  setOpenSubmoduleId(firstAllowedSubmodule);
   setOpenCreate(true);
 }
+
+
   async function loadUsers() {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      const res = await fetch("/api/admin/users", {
+  cache: "no-store",
+  credentials: "include",
+});
       const data = await res.json();
 
       if (!res.ok) {
@@ -114,11 +193,29 @@ console.log("EDIT USER:", { id: u.id, email: u.email });
     }
   }
 
-  
+  const [roles, setRoles] = useState<any[]>([]);
+  const [showPassword, setShowPassword] = useState(false);
+
+async function loadRoles() {
+  const res = await fetch("/api/admin/Roles", {
+    credentials: "include",
+  });
+
+  const data = await res.json();
+  console.log("ROLES API:", data);
+  if (res.ok) {
+    setRoles(data);
+  }
+}
 
 useEffect(() => {
   loadUsers();
   loadModules();
+  loadRoles();
+}, []);
+
+useEffect(() => {
+  setMounted(true);
 }, []);
 
   const filtered = useMemo(() => {
@@ -136,23 +233,37 @@ useEffect(() => {
     });
   }, [users, q, roleFilter]);
 
+type PrincipleRow = {
+  id: string;
+  title: string;
+  number: string;
+  text: string;
+};
+
+type QuestionRow = {
+  id: string;
+  parentId: string;
+  number: string;
+  text: string;
+};
+
 type ModuleRow = {
   id: string;
   key: string;
   name: string;
-  submodules: { id: string; key: string; name: string }[];
+  submodules: {
+    id: string;
+    key: string;
+    name: string;
+
+    // Por Componentes
+    principles: PrincipleRow[];
+
+    // Matriz Sistema Administrativo
+    questions: QuestionRow[];
+  }[];
 };
 
-const ROLE_OPTIONS = [
-  { value: "administrador", label: "Administrador" },
-  { value: "director", label: "Director" },
-  { value: "asesor", label: "Asesor" },
-] as const;
-
-function normRoleLabel(role: string | null) {
-  const k = String(role || "").toLowerCase();
-  return ROLE_LABEL[k] ?? (role || "-");
-}
 
 // ---- dentro del componente:
 const [modules, setModules] = useState<ModuleRow[]>([]);
@@ -171,32 +282,88 @@ const [form, setForm] = useState({
 
 const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 const [submoduleAccess, setSubmoduleAccess] = useState<Record<string, boolean>>({});
+const [principleAccess, setPrincipleAccess] = useState<Record<string, boolean>>({});
+const [questionAccess, setQuestionAccess] = useState<Record<string, boolean>>({});
 
-async function loadModules() {
+
+async function loadModules(): Promise<ModuleRow[]> {
   setModulesLoading(true);
   try {
-    const res = await fetch("/api/admin/modules", { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("modules error", data);
-      setModules([]);
-      return;
-    }
+    const res = await fetch("/api/admin/modules", {
+  cache: "no-store",
+  credentials: "include",
+});
+    const text = await res.text();
+
+console.log("RAW RESPONSE:", text);
+
+let data: any = {};
+
+try {
+  data = JSON.parse(text);
+} catch (e) {
+  console.error("NO ES JSON");
+}
+
+if (!res.ok) {
+  console.error("modules error", data);
+  alert(text);
+  setModules([]);
+  return [];
+}
     const mods = (data.modules ?? []) as ModuleRow[];
     setModules(mods);
 
+console.log("MODS COMPLETOS:", mods);
     // inicializar accesos (por defecto denegado)
     const ma: Record<string, boolean> = {};
     const sa: Record<string, boolean> = {};
-    for (const m of mods) {
-      ma[m.id] = false;
-      for (const s of m.submodules || []) sa[s.id] = false;
+    const pa: Record<string, boolean> = {};
+   for (const m of mods) {
+  ma[String(m.id)] = false;
+
+  for (const s of m.submodules || []) {
+    const sk = subKey(String(m.id), String(s.id));
+    sa[sk] = false;
+
+    for (const p of s.principles || []) {
+      const pk = principleKey(String(m.id), String(s.id), String(p.id));
+      pa[pk] = false;
     }
+  }
+}
     setModuleAccess(ma);
     setSubmoduleAccess(sa);
+    setPrincipleAccess(pa);
+      return mods;
   } finally {
+
     setModulesLoading(false);
+    
   }
+      
+}
+
+
+//función de carga de principios por componentes
+function togglePrinciple(principleId: string, subId: string, moduleId: string) {
+  const sk = subKey(moduleId, subId);
+  const pk = principleKey(moduleId, subId, principleId);
+
+  setPrincipleAccess((prev) => ({
+    ...prev,
+    [pk]: !prev[pk],
+  }));
+
+  setSubmoduleAccess((prev) => ({
+    ...prev,
+    [sk]: true,
+  }));
+
+  setModuleAccess((prev) => ({
+    ...prev,
+    [String(moduleId)]: true,
+  }));
 }
 
 function toggleModule(moduleId: string) {
@@ -206,37 +373,68 @@ function toggleModule(moduleId: string) {
   setModuleAccess((prevMA) => {
     const turningOn = !prevMA[moduleId];
 
-    // sincroniza submódulos en el mismo click
-    setSubmoduleAccess((prevSA) => {
-      const nextSA = { ...prevSA };
+    if (!turningOn) {
+      setSubmoduleAccess((prevSA) => {
+        const nextSA = { ...prevSA };
 
-      if (turningOn) {
-        // ✅ encender módulo => encender TODOS sus submódulos
-        for (const s of mod.submodules || []) nextSA[String(s.id)] = true;
-      } else {
-        // ✅ apagar módulo => apagar TODOS sus submódulos
-        for (const s of mod.submodules || []) nextSA[String(s.id)] = false;
-      }
+        for (const s of mod.submodules || []) {
+          nextSA[subKey(String(moduleId), String(s.id))] = false;
+        }
 
-      return nextSA;
-    });
+        return nextSA;
+      });
+
+      setOpenSubmoduleId(null);
+    }
 
     return { ...prevMA, [moduleId]: turningOn };
   });
 }
 
-
-function toggleSubmodule(subId: string, moduleId: string) {
-  setSubmoduleAccess((prev) => {
-    const next = { ...prev, [String(subId)]: !prev[String(subId)] };
-    return next;
-  });
-
-  // ✅ si prende un submódulo, prende el módulo
-  setModuleAccess((prev) => ({ ...prev, [String(moduleId)]: true }));
+function questionKey(moduleId: string, subId: string, questionId: string) {
+  return `${moduleId}-${subId}-${questionId}`;
 }
 
- const [missingOpen, setMissingOpen] = useState(false);
+function toggleQuestion(questionId: string, subId: string, moduleId: string) {
+  const sk = subKey(moduleId, subId);
+  const qk = questionKey(moduleId, subId, questionId);
+
+  setQuestionAccess((prev) => ({
+    ...prev,
+    [qk]: !prev[qk],
+  }));
+
+  setSubmoduleAccess((prev) => ({
+    ...prev,
+    [sk]: true,
+  }));
+
+  setModuleAccess((prev) => ({
+    ...prev,
+    [String(moduleId)]: true,
+  }));
+}
+
+function principleKey(moduleId: string, subId: string, principleId: string) {
+  return `${moduleId}-${subId}-${principleId}`;
+}
+
+function toggleSubmodule(subId: string, moduleId: string) {
+  const sk = subKey(moduleId, subId);
+
+  setSubmoduleAccess((prev) => ({
+    ...prev,
+    [sk]: !prev[sk],
+  }));
+
+  setModuleAccess((prev) => ({
+    ...prev,
+    [String(moduleId)]: true,
+  }));
+}
+
+const [missingOpen, setMissingOpen] = useState(false);
+
 const [missingMsg, setMissingMsg] = useState({
   title: "Faltan datos por agregar",
   desc: "Completa Nombre, Correo institucional, Contraseña y Rol.",
@@ -304,6 +502,7 @@ const payload = {
   is_active: form.is_active,
  modules: buildModulesPayload(),
   permissions: buildPermissionsPayload(),
+  principles: buildPrinciplesPayload(),//principios
 };
 
 console.log("submoduleAccess:", submoduleAccess);
@@ -312,10 +511,10 @@ console.log("payload final:", payload);
 
 const res = await fetch("/api/admin/users/create", {
   method: "POST",
+  credentials: "include",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(payload),
 });
-
 
     const data = await res.json();
 
@@ -360,6 +559,79 @@ const res = await fetch("/api/admin/users/create", {
   }
 }
 
+// preguntas principios
+function buildQuestionsPayload() {
+  return Object.entries(questionAccess)
+    .filter(([, allowed]) => allowed)
+    .map(([key]) => {
+      const [, subModuleId, questionId] = key.split("-");
+
+      return {
+        subModuleId: Number(subModuleId),
+        questionId: Number(questionId),
+        canView: true,
+        canCreate: false,
+        canEdit: true,
+        canDelete: false,
+      };
+    });
+}
+
+//Eliminar usuarios
+
+async function handleDeleteUser() {
+  if (!deleteTarget) return;
+
+  const confirm = await Swal.fire({
+    icon: "warning",
+    title: "¿Eliminar usuario?",
+    text: `Se eliminará ${deleteTarget.full_name || deleteTarget.email}`,
+    showCancelButton: true,
+    confirmButtonText: "Sí, eliminar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#dc2626",
+    cancelButtonColor: "#64748b",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo eliminar",
+        text: data?.error || "Error al eliminar usuario",
+      });
+
+      return;
+    }
+
+    await Swal.fire({
+      icon: "success",
+      title: "Usuario eliminado",
+      text: "El usuario fue eliminado correctamente.",
+    });
+
+    setDeleteTarget(null);
+
+    await loadUsers();
+  } catch (err) {
+    await Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: "No se pudo conectar con el servidor.",
+    });
+  }
+}
+
+
 function buildModulesPayload() {
   return Object.entries(moduleAccess)
     .filter(([_, allowed]) => allowed)
@@ -375,16 +647,39 @@ function buildModulesPayload() {
 function buildPermissionsPayload() {
   return Object.entries(submoduleAccess)
     .filter(([, allowed]) => allowed)
-    .map(([subModuleId]) => ({
-      subModuleId: Number(subModuleId), // INT
-      canView: true,
-      canCreate: false,
-      canEdit: false,
-      canDelete: false,
-    }));
+    .map(([key]) => {
+      const [, subModuleId] = key.split("-");
+
+      return {
+        subModuleId: Number(subModuleId),
+        canView: true,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+      };
+    });
 }
 
+function buildPrinciplesPayload() {
+  return Object.entries(principleAccess)
+    .filter(([, allowed]) => allowed)
+    .map(([key]) => {
+      const [, subModuleId, principleId] = key.split("-");
 
+      return {
+        subModuleId: Number(subModuleId),
+        principleId: Number(principleId),
+        canView: true,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+      };
+    });
+}
+
+function subKey(moduleId: string, subId: string) {
+  return `${moduleId}-${subId}`;
+}
 
 async function handleUpdateUser() {
   if (!editTarget) return;
@@ -399,13 +694,17 @@ async function handleUpdateUser() {
   is_active: form.is_active,
   modules: buildModulesPayload(),
   permissions: buildPermissionsPayload(), // subModuleId int + flags
+   principles: buildPrinciplesPayload(), // principios
+   questions: buildQuestionsPayload(),//preguntas principios
 };
   
+
 console.log("SUBMODULE ACCESS:", submoduleAccess);
 console.log("PERMISSIONS PAYLOAD:", buildPermissionsPayload());
 
 const res = await fetch(`/api/admin/users/${editTarget.id}`, {
   method: "PUT",
+  credentials: "include",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(payload),
 });
@@ -439,6 +738,10 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
   const adminUsers = users.filter((u) => String(u.role || "").toLowerCase() === "administrador").length;
   const rolesCount = new Set(users.map((u) => String(u.role || "").toLowerCase()).filter(Boolean)).size;
 
+if (!mounted) {
+  return null;
+}
+
   return (
     <div className="flex flex-col gap-5">
       {/* Header + button */}
@@ -465,12 +768,15 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
     // ✅ reset permisos
     const ma: Record<string, boolean> = {};
     const sa: Record<string, boolean> = {};
-    for (const m of modules) {
-      ma[String(m.id)] = false;
-      for (const s of m.submodules || []) sa[String(s.id)] = false;
-    }
-    setModuleAccess(ma);
-    setSubmoduleAccess(sa);
+    const pa: Record<string, boolean> = {};
+    const qa: Record<string, boolean> = {};
+
+
+setModuleAccess(ma);
+setSubmoduleAccess(sa);
+setPrincipleAccess(pa);
+setOpenSubmoduleId(null);
+setQuestionAccess(qa);
 
     // ✅ abrir
     setOpenCreate(true);
@@ -480,7 +786,7 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
 </Button>
   </DialogTrigger>
 
- <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+ <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
     <DialogHeader>
    <DialogTitle>{editTarget ? "Actualizar Usuario" : "Nuevo Usuario"}</DialogTitle>
     </DialogHeader>
@@ -511,15 +817,38 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
       {/* fila 2 */}
       <div className="grid grid-cols-2 gap-4">
     
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Contraseña</label>
-          <Input
-            type="password"
-            placeholder="Contraseña"
-            value={form.password}
-            onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-          />
-        </div>
+     <div>
+  <label className="mb-2 block text-sm font-medium">
+    Contraseña
+  </label>
+
+  <div className="relative">
+    <Input
+      type={showPassword ? "text" : "password"}
+      placeholder="Contraseña"
+      value={form.password}
+      onChange={(e) =>
+        setForm((prev) => ({
+          ...prev,
+          password: e.target.value,
+        }))
+      }
+      className="pr-10"
+    />
+
+    <button
+      type="button"
+      onClick={() => setShowPassword((prev) => !prev)}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
+    >
+      {showPassword ? (
+        <EyeOff className="h-5 w-5" />
+      ) : (
+        <Eye className="h-5 w-5" />
+      )}
+    </button>
+  </div>
+</div>
            <div className="grid gap-2">
           <label className="text-sm font-medium">Rol</label>
           <select
@@ -527,9 +856,11 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
             value={form.role}
             onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
           >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
+           {roles.map((r) => (
+  <option key={r.RoleId} value={r.RoleKey}>
+    {r.RoleName}
+  </option>
+))}
           </select>
         </div>
 
@@ -586,27 +917,128 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
                     </div>
 
                     {/* submódulos (solo si módulo permitido) */}
-                    {allowed && (m.submodules?.length ?? 0) > 0 && (
-                      <div className="bg-white">
-                        {m.submodules.map((s) => {
-                          const sAllowed = !!submoduleAccess[s.id];
-                          return (
-                            <div key={s.id} className="flex items-center justify-between px-5 py-2 border-t">
-                              <div className="text-sm text-slate-700">{s.name}</div>
-                              <button
-                                type="button"
-                                onClick={() => toggleSubmodule(s.id, m.id)}
-                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                                  sAllowed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                                }`}
-                              >
-                                {sAllowed ? "Permitido" : "Denegado"}
-                              </button>
-                            </div>
-                          );
-                        })}
+                    
+              {allowed && (m.submodules?.length ?? 0) > 0 && (
+  <div className="bg-white">
+    {m.submodules.map((s) => {
+
+
+ const sk = subKey(m.id, s.id);
+  const sAllowed = !!submoduleAccess[sk];
+
+
+      return (
+        <div key={`submodule-${m.id}-${s.id}`} className="border-t">
+          <div className="flex items-center justify-between px-5 py-2">
+            <div className="text-sm text-slate-700">{s.name}</div>
+
+          <button
+  type="button"
+ onClick={() => {
+  const wasAllowed = !!submoduleAccess[sk];
+
+  toggleSubmodule(s.id, m.id);
+
+  if (!wasAllowed) {
+    setOpenSubmoduleId(sk);
+  } else {
+    setOpenSubmoduleId(null);
+  }
+}}
+  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+    sAllowed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+  }`}
+>
+  {sAllowed ? "Permitido" : "Denegado"}
+</button>
+          </div>
+
+          {sAllowed && openSubmoduleId === sk && (s.principles?.length ?? 0) > 0 && (
+            <div className="bg-slate-50 px-8 py-3 space-y-2">
+              {s.principles.map((p) => {
+                const pk = principleKey(m.id, s.id, p.id);
+const pAllowed = !!principleAccess[pk];
+
+                return (
+                  <div
+                    key={`principle-${s.id}-${p.id}`}
+                    className="flex items-start justify-between gap-3 rounded-md border bg-white px-3 py-2"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">
+                        {p.title}
                       </div>
-                    )}
+
+                      <div className="text-xs text-slate-500">
+                        {p.number}. {p.text}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => togglePrinciple(p.id, s.id, m.id)}
+                      className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                        pAllowed
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {pAllowed ? "Permitido" : "Denegado"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Preguntas */}
+
+{sAllowed && openSubmoduleId === sk && (s.questions?.length ?? 0) > 0 && (
+  <div className="bg-slate-50 px-8 py-3 space-y-2">
+    {s.questions.map((q) => {
+      const qk = questionKey(m.id, s.id, q.id);
+      const qAllowed = !!questionAccess[qk];
+
+      return (
+        <div
+          key={`question-${s.id}-${q.id}`}
+          className="flex items-start justify-between gap-3 rounded-md border bg-white px-3 py-2"
+        >
+          <div>
+            <div className="text-sm font-medium text-slate-800">
+              Pregunta {q.number}
+            </div>
+
+            <div className="text-xs text-slate-500">
+              {q.text}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => toggleQuestion(q.id, s.id, m.id)}
+            className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
+              qAllowed
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {qAllowed ? "Permitido" : "Denegado"}
+          </button>
+        </div>
+      );
+    })}
+  </div>
+)}
+        </div>
+      );
+    })}
+  </div>
+
+  
+)}
+
+
                   </div>
                 );
               })}
@@ -667,16 +1099,19 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
           />
         </div>
 
-        <select
-          className="h-10 w-full md:w-56 rounded-md border bg-background px-3 text-sm"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-        >
-          <option value="all">Todos los roles</option>
-          <option value="administrador">Administrador</option>
-          <option value="director">Director</option>
-          <option value="asesor">Asesor</option>
-        </select>
+ <select
+  className="h-10 w-full md:w-56 rounded-md border bg-background px-3 text-sm"
+  value={roleFilter}
+  onChange={(e) => setRoleFilter(e.target.value)}
+>
+  <option value="all">Todos los roles</option>
+
+  {roles.map((r) => (
+    <option key={r.RoleId} value={r.RoleKey}>
+      {r.RoleName}
+    </option>
+  ))}
+</select>
       </div>
 
       {/* List title */}
@@ -724,9 +1159,9 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
           <td className="px-4 py-3 font-medium">{u.full_name || "-"}</td>
 
           <td className="px-4 py-3">
-            <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">
-              {ROLE_LABEL[roleKey] ?? (u.role || "-")}
-            </span>
+          <span className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium">
+  {u.role || "-"}
+</span>
           </td>
 
           <td className="px-4 py-3">
@@ -789,6 +1224,42 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>
+
+<AlertDialog
+  open={!!deleteTarget}
+  onOpenChange={(open) => {
+    if (!open) setDeleteTarget(null);
+  }}
+>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>
+        ¿Eliminar usuario?
+      </AlertDialogTitle>
+
+      <AlertDialogDescription>
+        Esta acción eliminará permanentemente el usuario{" "}
+        <strong>
+          {deleteTarget?.full_name || deleteTarget?.email}
+        </strong>.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+
+    <AlertDialogFooter>
+      <AlertDialogCancel>
+        Cancelar
+      </AlertDialogCancel>
+
+      <AlertDialogAction
+        className="bg-red-600 hover:bg-red-700"
+        onClick={handleDeleteUser}
+      >
+        Eliminar
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { getCurrentUserFromToken } from "@/lib/current-user";
+import { getCurrentUserId } from "@/lib/current-user";
+import { auth } from "@/auth";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -10,7 +12,7 @@ export async function PATCH(req: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     const body = await req.json();
-    const { field, value } = body;
+    const { field, value, fecha } = body;
 
     const allowedFields = [
       "Elaborado",
@@ -18,7 +20,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       "Implementado",
       "Actualizado",
       "Difundido",
-    ];
+    ] as const;
 
     if (!allowedFields.includes(field)) {
       return NextResponse.json(
@@ -46,9 +48,12 @@ export async function PATCH(req: Request, context: RouteContext) {
           DocumentId,
           Nombre,
           Elaborado,
+          Fecha_elaborado,
           Aprobado,
+          Fecha_Aprobado,
           Implementado,
           Actualizado,
+          Fecha_Actualizado,
           Difundido
         FROM Documentos_DGCI
         WHERE DocumentId = @DocumentId
@@ -63,6 +68,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
+    // Validaciones de flujo
     if (field === "Aprobado" && value === true && !documento.Elaborado) {
       return NextResponse.json(
         { error: "No puede aprobar un documento no elaborado" },
@@ -108,25 +114,179 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
+    let updateSql = "";
+    let action = "";
+    let message = "Estado actualizado correctamente";
+
+    // Reglas de negocio
+    if (field === "Elaborado") {
+      if (value === true) {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Elaborado = 1,
+            Fecha_elaborado = ISNULL(Fecha_elaborado, GETDATE()),
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "UPDATE_ELABORADO";
+        message = "Documento marcado como elaborado correctamente";
+      } else {
+        // Si se quita elaborado, se desactivan todos los demás
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Elaborado = 0,
+            Fecha_elaborado = NULL,
+            Aprobado = 0,
+            Fecha_Aprobado = NULL,
+            Implementado = 0,
+            Actualizado = 0,
+            Fecha_Actualizado = NULL,
+            Difundido = 0,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "REMOVE_ELABORADO";
+        message =
+          "Se quitó Elaborado y se reiniciaron Aprobado, Implementado, Actualizado y Difundido";
+      }
+    }
+
+    if (field === "Aprobado") {
+      if (value === true) {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Aprobado = 1,
+            Fecha_Aprobado = @Fecha,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "UPDATE_APROBADO";
+        message = "Documento aprobado correctamente";
+      } else {
+        // Si se quita aprobado, también baja lo que depende de él
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Aprobado = 0,
+            Fecha_Aprobado = NULL,
+            Implementado = 0,
+            Actualizado = 0,
+            Fecha_Actualizado = NULL,
+            Difundido = 0,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "REMOVE_APROBADO";
+        message =
+          "Se quitó Aprobado y se reiniciaron Implementado, Actualizado y Difundido";
+      }
+    }
+
+    if (field === "Implementado") {
+      if (value === true) {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Implementado = 1,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "UPDATE_IMPLEMENTADO";
+        message = "Documento implementado correctamente";
+      } else {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Implementado = 0,
+            Actualizado = 0,
+            Fecha_Actualizado = NULL,
+            Difundido = 0,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "REMOVE_IMPLEMENTADO";
+        message =
+          "Se quitó Implementado y se reiniciaron Actualizado y Difundido";
+      }
+    }
+
+    if (field === "Actualizado") {
+      if (value === true) {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Actualizado = 1,
+            Fecha_Actualizado = @Fecha,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "UPDATE_ACTUALIZADO";
+        message = "Documento actualizado correctamente";
+      } else {
+        updateSql = `
+          UPDATE Documentos_DGCI
+          SET 
+            Actualizado = 0,
+            Fecha_Actualizado = NULL,
+            Difundido = 0,
+            UpdatedAt = GETDATE()
+          WHERE DocumentId = @DocumentId
+        `;
+        action = "REMOVE_ACTUALIZADO";
+        message = "Se quitó Actualizado y se reinició Difundido";
+      }
+    }
+
+    if (field === "Difundido") {
+      updateSql = `
+        UPDATE Documentos_DGCI
+        SET 
+          Difundido = @Value,
+          UpdatedAt = GETDATE()
+        WHERE DocumentId = @DocumentId
+      `;
+      action = value ? "UPDATE_DIFUNDIDO" : "REMOVE_DIFUNDIDO";
+      message = value
+        ? "Documento difundido correctamente"
+        : "Se quitó el estado Difundido";
+    }
+
     await pool
       .request()
       .input("DocumentId", Number(id))
       .input("Value", value)
+      .input("Fecha", fecha || null) 
+      .query(updateSql);
+
+    const estadoActualizado = await pool
+      .request()
+      .input("DocumentId", Number(id))
       .query(`
-        UPDATE Documentos_DGCI
-        SET ${field} = @Value
+        SELECT
+          DocumentId,
+          Nombre,
+          Elaborado,
+          Fecha_elaborado,
+          Aprobado,
+          Fecha_Aprobado,
+          Implementado,
+          Actualizado,
+          Fecha_Actualizado,
+          Difundido,
+          UpdatedAt
+        FROM Documentos_DGCI
         WHERE DocumentId = @DocumentId
       `);
+
+    const actualizado = estadoActualizado.recordset[0];
 
     await pool
       .request()
       .input("ActorUserId", me.userId)
-      .input(
-        "Action",
-        value
-          ? `UPDATE_${String(field).toUpperCase()}`
-          : `REMOVE_${String(field).toUpperCase()}`
-      )
+      .input("Action", action)
       .input("Entity", "Documentos_DGCI")
       .input("EntityId", String(id))
       .input(
@@ -136,6 +296,7 @@ export async function PATCH(req: Request, context: RouteContext) {
           campo: field,
           nuevoValor: value,
           usuarioEmail: me.email ?? null,
+          estadoFinal: actualizado,
         })
       )
       .query(`
@@ -159,7 +320,8 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     return NextResponse.json({
       ok: true,
-      message: "Estado actualizado correctamente",
+      message,
+      data: actualizado,
     });
   } catch (error: any) {
     console.error("PATCH /api/documents/[id] error:", error);
@@ -176,16 +338,26 @@ export async function PATCH(req: Request, context: RouteContext) {
 
 export async function DELETE(req: Request, context: RouteContext) {
   try {
-    const { id } = await context.params;
-    const me = await getCurrentUserFromToken();
+    const session = await auth();
+    console.log("SESSION DELETE:", session);
 
-    if (!me?.userId) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         { error: "No se pudo identificar el usuario autenticado" },
         { status: 401 }
       );
     }
 
+    const actorUserId = await getCurrentUserId();
+
+    if (!actorUserId) {
+      return NextResponse.json(
+        { error: "No se pudo obtener el UserId del usuario autenticado" },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await context.params;
     const pool = await getPool();
 
     const docResult = await pool
@@ -218,43 +390,40 @@ export async function DELETE(req: Request, context: RouteContext) {
         WHERE DocumentId = @DocumentId
       `);
 
-    try {
-      await pool
-        .request()
-        .input("ActorUserId", me.userId)
-        .input("Action", "DELETE_DOCUMENT")
-        .input("Entity", "Documentos_DGCI")
-        .input("EntityId", String(id))
-        .input(
-          "Details",
-          JSON.stringify({
-            documento: documento.Nombre,
-            subModuleId: documento.SubModuleId,
-            pdfUrl: documento.PdfUrl,
-            usuarioEmail: me.email ?? null,
-          })
+    await pool
+      .request()
+      .input("ActorUserId", actorUserId)
+      .input("Action", "DELETE_DOCUMENT")
+      .input("Entity", "Documentos_DGCI")
+      .input("EntityId", String(id))
+      .input(
+        "Details",
+        JSON.stringify({
+          documento: documento.Nombre,
+          subModuleId: documento.SubModuleId,
+          pdfUrl: documento.PdfUrl,
+          eliminadoPor: session.user.email,
+          fechaEliminacion: new Date().toISOString(),
+        })
+      )
+      .query(`
+        INSERT INTO dbo.Auditoria_Datos_Dgci (
+          ActorUserId,
+          Action,
+          Entity,
+          EntityId,
+          Details,
+          CreatedAt
         )
-        .query(`
-          INSERT INTO Auditoria_Datos_Dgci (
-            ActorUserId,
-            Action,
-            Entity,
-            EntityId,
-            Details,
-            CreatedAt
-          )
-          VALUES (
-            @ActorUserId,
-            @Action,
-            @Entity,
-            @EntityId,
-            @Details,
-            GETDATE()
-          )
-        `);
-    } catch (auditError) {
-      console.error("Error al registrar auditoría:", auditError);
-    }
+        VALUES (
+          @ActorUserId,
+          @Action,
+          @Entity,
+          @EntityId,
+          @Details,
+          GETDATE()
+        )
+      `);
 
     return NextResponse.json({
       ok: true,

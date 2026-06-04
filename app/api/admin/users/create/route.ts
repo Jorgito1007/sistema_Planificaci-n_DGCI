@@ -1,35 +1,45 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
+import { getCurrentUser } from "@/lib/current-user";
 import bcrypt from "bcryptjs";
 import { getPool, sql } from "@/lib/db";
 
-async function requireAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
-  if (!token) return null;
-
-  const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
-  if (String(payload.role || "").toLowerCase() !== "administrador") return null;
-  return payload;
-}
 
 export async function POST(httpReq: Request) {
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
 
   try {
-    const me = await requireAdmin();
-    if (!me) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+   
+    const me = await getCurrentUser();
+
+if (!me) {
+  return NextResponse.json({ error: "No auth" }, { status: 401 });
+}
+
+const role = String(me.role || "").toLowerCase();
+
+if (role !== "administrador") {
+  return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+}
 
     const body = await httpReq.json();
-    const { email, full_name, password, roleKey, is_active, permissions } = body;
+const {
+  email,
+  full_name,
+  password,
+  roleKey,
+  is_active,
+  modules,
+  permissions,
+  principles,
+  questions,
+} = body;
 
     if (!email || !password || !roleKey) {
       return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
 
-    const actorUserId = me.userId || me.UserId || me.id || me.sub;
+    const actorUserId = me.userId;
 
     await tx.begin();
 
@@ -77,6 +87,42 @@ export async function POST(httpReq: Request) {
       .input("RoleId", sql.Int, roleId)
       .query(`INSERT INTO dbo.UserRoles_Dgci (UserId, RoleId) VALUES (@UserId, @RoleId)`);
 
+
+      // 5) Permisos de módulos
+if (Array.isArray(modules) && modules.length > 0) {
+  const validModules = modules
+    .map((m: any) => ({
+      moduleId: Number(m.moduleId),
+      canView: !!m.canView,
+      canCreate: !!m.canCreate,
+      canEdit: !!m.canEdit,
+      canDelete: !!m.canDelete,
+    }))
+    .filter((m: any) => Number.isFinite(m.moduleId) && m.moduleId > 0);
+
+  if (validModules.length > 0) {
+    const valuesSql = validModules
+      .map((m: any, i: number) =>
+        `(@UserId, @ModuleId${i}, ${m.canView ? 1 : 0}, ${m.canCreate ? 1 : 0}, ${m.canEdit ? 1 : 0}, ${m.canDelete ? 1 : 0})`
+      )
+      .join(",");
+
+    const reqMod = new sql.Request(tx);
+    reqMod.input("UserId", sql.UniqueIdentifier, userId);
+
+    validModules.forEach((m: any, i: number) => {
+      reqMod.input(`ModuleId${i}`, sql.Int, m.moduleId);
+    });
+
+    await reqMod.query(`
+      INSERT INTO dbo.usuariosModulosPermisos
+        (UserId, ModuleId, CanView, CanCreate, CanEdit, CanDelete)
+      VALUES ${valuesSql}
+    `);
+
+    console.log("módulos insertados:", validModules.length);
+  }
+}
 // 5) Permisos en 1 query 
 // 5) Permisos (SubModuleId INT)
 if (Array.isArray(permissions) && permissions.length > 0) {
@@ -128,6 +174,89 @@ console.log("permissions recibidos:", permissions);
           VALUES (@ActorUserId, @Action, @Entity, @EntityId, @Details)
         `);
     }
+
+// Permisos por principios
+if (Array.isArray(principles) && principles.length > 0) {
+  const validPrinciples = principles
+    .map((p: any) => ({
+      subModuleId: Number(p.subModuleId),
+      principioId: Number(p.principleId),
+      canView: !!p.canView,
+      canCreate: !!p.canCreate,
+      canEdit: !!p.canEdit,
+      canDelete: !!p.canDelete,
+    }))
+    .filter((p: any) =>
+      Number.isFinite(p.subModuleId) &&
+      p.subModuleId > 0 &&
+      Number.isFinite(p.principioId) &&
+      p.principioId > 0
+    );
+
+  if (validPrinciples.length > 0) {
+    const valuesSql = validPrinciples
+      .map((p: any, i: number) =>
+        `(@UserId, @SubIdP${i}, @PrincipioId${i}, ${p.canView ? 1 : 0}, ${p.canCreate ? 1 : 0}, ${p.canEdit ? 1 : 0}, ${p.canDelete ? 1 : 0})`
+      )
+      .join(",");
+
+    const req = new sql.Request(tx);
+    req.input("UserId", sql.UniqueIdentifier, userId);
+
+    validPrinciples.forEach((p: any, i: number) => {
+      req.input(`SubIdP${i}`, sql.Int, p.subModuleId);
+      req.input(`PrincipioId${i}`, sql.Int, p.principioId);
+    });
+
+    await req.query(`
+      INSERT INTO dbo.usuariosPrincipiosPermisos
+        (UserId, SubModuleId, PrincipioId, CanView, CanCreate, CanEdit, CanDelete)
+      VALUES ${valuesSql}
+    `);
+  }
+}
+
+// Permisos por preguntas
+if (Array.isArray(questions) && questions.length > 0) {
+  const validQuestions = questions
+    .map((q: any) => ({
+      subModuleId: Number(q.subModuleId),
+      questionId: Number(q.questionId),
+      canView: !!q.canView,
+      canCreate: !!q.canCreate,
+      canEdit: !!q.canEdit,
+      canDelete: !!q.canDelete,
+    }))
+    .filter((q: any) =>
+      Number.isFinite(q.subModuleId) &&
+      q.subModuleId > 0 &&
+      Number.isFinite(q.questionId) &&
+      q.questionId > 0
+    );
+
+  if (validQuestions.length > 0) {
+    const valuesSql = validQuestions
+      .map((q: any, i: number) =>
+        `(@UserId, @SubIdQ${i}, @QuestionId${i}, ${q.canView ? 1 : 0}, ${q.canCreate ? 1 : 0}, ${q.canEdit ? 1 : 0}, ${q.canDelete ? 1 : 0})`
+      )
+      .join(",");
+
+    const req = new sql.Request(tx);
+    req.input("UserId", sql.UniqueIdentifier, userId);
+
+    validQuestions.forEach((q: any, i: number) => {
+      req.input(`SubIdQ${i}`, sql.Int, q.subModuleId);
+      req.input(`QuestionId${i}`, sql.Int, q.questionId);
+    });
+
+    await req.query(`
+      INSERT INTO dbo.usuariosPreguntasPermisos
+        (UserId, SubModuleId, QuestionId, CanView, CanCreate, CanEdit, CanDelete)
+      VALUES ${valuesSql}
+    `);
+  }
+}
+
 
     await tx.commit();
     return NextResponse.json({ ok: true, userId });

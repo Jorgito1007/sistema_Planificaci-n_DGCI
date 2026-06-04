@@ -1,114 +1,117 @@
-/*import { createClient } from "@/lib/supabase_old/server"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ReportsCharts } from "@/components/reports-charts"
+import Link from "next/link";
+import {
+  ShieldCheck,
+  ClipboardList,
+  ArrowRight,
+  Users,
+  FileText,
+} from "lucide-react";
 
-const subModuleNames: Record<string, string> = {
-  pei: "PEI",
-  poa: "POA",
-  presupuesto: "Presupuesto",
-  organizacion: "Organizacion",
-  personal: "Personal",
-  abastecimiento: "Abastecimiento",
-  contabilidad: "Contabilidad",
-  tesoreria: "Tesoreria",
-  endeudamiento: "Endeudamiento",
-  "inversion-publica": "Inversion Publica",
-  "defensa-juridica": "Defensa Juridica",
-  "control-interno": "Control Interno",
-  modernizacion: "Modernizacion",
-}
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-interface StatusStat {
-  name: string
-  elaborado: number
-  aprobado: number
-  implementado: number
-  actualizado: number
-  difundido: number
-  total: number
-}
+const informes = [
+  {
+    title: "Informe de Permisos de Usuarios",
+    description:
+      "Consulta los usuarios registrados con sus permisos asignados en módulos y submódulos.",
+    href: "/dashboard/informes/permisos-usuarios",
+    icon: ShieldCheck,
+    color: "from-blue-600 to-cyan-500",
+    bg: "bg-blue-50",
+    text: "text-blue-700",
+    detail: "Módulos, submódulos y permisos",
+    statsIcon: Users,
+  },
+  {
+    title: "Informe de Planes de Acción",
+    description:
+      "Visualiza los planes de acción enviados por cada usuario, con su periodo y detalle correspondiente.",
+    href: "/dashboard/informes/planes-accion",
+    icon: ClipboardList,
+    color: "from-emerald-600 to-green-500",
+    bg: "bg-emerald-50",
+    text: "text-emerald-700",
+    detail: "Planes enviados por usuario",
+    statsIcon: FileText,
+  },
+];
 
-export default async function InformesPage() {
-  const supabase = await createClient()
-
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("*")
-
-  const { data: componentDocs } = await supabase
-    .from("component_documents")
-    .select("*")
-
-  // Calculate stats per sub-module
-  const subModuleStats: StatusStat[] = Object.entries(subModuleNames).map(([key, name]) => {
-    const docs = documents?.filter((d) => d.sub_module === key) || []
-    const total = docs.length
-    return {
-      name,
-      elaborado: total > 0 ? Math.round((docs.filter((d) => d.elaborado).length / total) * 100) : 0,
-      aprobado: total > 0 ? Math.round((docs.filter((d) => d.aprobado).length / total) * 100) : 0,
-      implementado: total > 0 ? Math.round((docs.filter((d) => d.implementado).length / total) * 100) : 0,
-      actualizado: total > 0 ? Math.round((docs.filter((d) => d.actualizado).length / total) * 100) : 0,
-      difundido: total > 0 ? Math.round((docs.filter((d) => d.difundido).length / total) * 100) : 0,
-      total,
-    }
-  }).filter((s) => s.total > 0)
-
-  // Calculate component stats
-  const componentStats: StatusStat[] = [1, 2, 3, 4, 5].map((i) => {
-    const key = `componente-${i}`
-    const docs = componentDocs?.filter((d) => d.component === key) || []
-    const total = docs.length
-    return {
-      name: `Componente ${i}`,
-      elaborado: total > 0 ? Math.round((docs.filter((d) => d.elaborado).length / total) * 100) : 0,
-      aprobado: total > 0 ? Math.round((docs.filter((d) => d.aprobado).length / total) * 100) : 0,
-      implementado: total > 0 ? Math.round((docs.filter((d) => d.implementado).length / total) * 100) : 0,
-      actualizado: total > 0 ? Math.round((docs.filter((d) => d.actualizado).length / total) * 100) : 0,
-      difundido: total > 0 ? Math.round((docs.filter((d) => d.difundido).length / total) * 100) : 0,
-      total,
-    }
-  }).filter((s) => s.total > 0)
-
-  // Overall percentages
-  const allDocs = [...(documents || []), ...(componentDocs || [])]
-  const totalAll = allDocs.length
-  const overallStats = {
-    elaborado: totalAll > 0 ? Math.round((allDocs.filter((d) => d.elaborado).length / totalAll) * 100) : 0,
-    aprobado: totalAll > 0 ? Math.round((allDocs.filter((d) => d.aprobado).length / totalAll) * 100) : 0,
-    implementado: totalAll > 0 ? Math.round((allDocs.filter((d) => d.implementado).length / totalAll) * 100) : 0,
-    actualizado: totalAll > 0 ? Math.round((allDocs.filter((d) => d.actualizado).length / totalAll) * 100) : 0,
-    difundido: totalAll > 0 ? Math.round((allDocs.filter((d) => d.difundido).length / totalAll) * 100) : 0,
-  }
-
+export default function InformesPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-foreground text-balance">Informes y Estadisticas</h1>
-        <p className="text-sm text-muted-foreground">Porcentaje de avance por modulo y componente</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Informes
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Seleccione el tipo de informe que desea consultar.
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-5">
-        {Object.entries(overallStats).map(([key, value]) => (
-          <Card key={key}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground capitalize">{key}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{value}%</div>
-              <div className="mt-2 h-2 w-full rounded-full bg-muted">
+      <div className="grid gap-6 md:grid-cols-2">
+        {informes.map((informe) => {
+          const Icon = informe.icon;
+          const StatsIcon = informe.statsIcon;
+
+          return (
+            <Link key={informe.href} href={informe.href}>
+              <Card className="group relative overflow-hidden border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
                 <div
-                  className="h-2 rounded-full bg-primary transition-all"
-                  style={{ width: `${value}%` }}
+                  className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${informe.color}`}
                 />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
-      <ReportsCharts subModuleStats={subModuleStats} componentStats={componentStats} />
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div
+                      className={`flex h-14 w-14 items-center justify-center rounded-2xl ${informe.bg}`}
+                    >
+                      <Icon className={`h-7 w-7 ${informe.text}`} />
+                    </div>
+
+                    <div className="rounded-full bg-slate-100 p-2 transition group-hover:bg-slate-200">
+                      <ArrowRight className="h-5 w-5 text-slate-500 transition group-hover:translate-x-1 group-hover:text-slate-800" />
+                    </div>
+                  </div>
+
+                  <CardTitle className="mt-4 text-xl font-bold text-slate-900">
+                    {informe.title}
+                  </CardTitle>
+                </CardHeader>
+
+                <CardContent className="space-y-5">
+                  <p className="text-sm leading-6 text-slate-600">
+                    {informe.description}
+                  </p>
+
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <StatsIcon className={`h-5 w-5 ${informe.text}`} />
+                    <span className="text-sm font-medium text-slate-700">
+                      {informe.detail}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Ver informe
+                    </span>
+
+                    <span
+                      className={`text-sm font-semibold ${informe.text}`}
+                    >
+                      Abrir
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
     </div>
-  )
+  );
 }
-*/

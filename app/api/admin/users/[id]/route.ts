@@ -1,17 +1,42 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { getPool, sql } from "@/lib/db";
+import {
+  getCurrentUser,
+  getCurrentUserFromToken,
+  getUserByEmail,
+} from "@/lib/current-user";
 
 async function requireAdmin() {
-  const token = (await cookies()).get("auth_token")?.value;
-  if (!token) return null;
+  let currentUser = await getCurrentUser();
 
-  const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
-  if (String(payload.role || "").toLowerCase() !== "administrador") return null;
+  if (!currentUser) {
+    const tokenUser = await getCurrentUserFromToken();
 
-  return payload;
+    if (tokenUser?.email) {
+      currentUser = await getUserByEmail(tokenUser.email);
+    }
+  }
+
+  if (!currentUser) return null;
+
+  const role = String(currentUser.role || "").toLowerCase();
+
+  if (role !== "administrador") return null;
+
+  return currentUser;
+}
+
+function getUserIdFromUrl(req: Request) {
+  const url = new URL(req.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  return parts[3];
+}
+
+function isGuid(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value
+  );
 }
 
 export async function PUT(req: Request) {
@@ -20,29 +45,46 @@ export async function PUT(req: Request) {
 
   try {
     const me = await requireAdmin();
-    if (!me) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
-    // ✅ sacar id desde URL (porque params a veces viene null)
-    const url = new URL(req.url);
-    const parts = url.pathname.split("/").filter(Boolean);
-    const userId = parts[3]; // api/admin/users/{id}
+    if (!me) {
+      return NextResponse.json(
+        { error: "No autorizado" },
+        { status: 403 }
+      );
+    }
 
-    const guidRegex =
-      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-    if (!guidRegex.test(userId)) {
-      return NextResponse.json({ error: "UserId inválido", detail: userId }, { status: 400 });
+    const userId = getUserIdFromUrl(req);
+
+    if (!isGuid(userId)) {
+      return NextResponse.json(
+        { error: "UserId inválido", detail: userId },
+        { status: 400 }
+      );
     }
 
     const body = await req.json();
-    const { email, full_name, password, roleKey, is_active, permissions, modules } = body;
+
+    const {
+      email,
+      full_name,
+      password,
+      roleKey,
+      is_active,
+      modules,
+      permissions,
+      principles,
+      questions,
+    } = body;
 
     if (!email || !roleKey) {
-      return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Faltan datos" },
+        { status: 400 }
+      );
     }
 
     await tx.begin();
 
-    // 1) actualizar datos básicos
     await new sql.Request(tx)
       .input("UserId", sql.UniqueIdentifier, userId)
       .input("Email", sql.NVarChar(255), email)
@@ -50,36 +92,44 @@ export async function PUT(req: Request) {
       .input("IsActive", sql.Bit, is_active ? 1 : 0)
       .query(`
         UPDATE dbo.Usuarios_Dgci
-        SET Email=@Email, FullName=@FullName, IsActive=@IsActive
-        WHERE UserId=@UserId
+        SET Email = @Email,
+            FullName = @FullName,
+            IsActive = @IsActive
+        WHERE UserId = @UserId
       `);
 
-    // 2) actualizar password si viene
     if (password && String(password).trim().length > 0) {
       const hash = await bcrypt.hash(password, 10);
+
       await new sql.Request(tx)
         .input("UserId", sql.UniqueIdentifier, userId)
         .input("PasswordHash", sql.NVarChar(255), hash)
         .query(`
           UPDATE dbo.Usuarios_Dgci
-          SET PasswordHash=@PasswordHash
-          WHERE UserId=@UserId
+          SET PasswordHash = @PasswordHash
+          WHERE UserId = @UserId
         `);
     }
 
-    // 3) actualizar rol (RoleId es INT)
     const roleRow = await new sql.Request(tx)
       .input("RoleKey", sql.NVarChar(50), roleKey)
-      .query(`SELECT TOP 1 RoleId FROM dbo.Roles_Dgci WHERE RoleKey=@RoleKey`);
+      .query(`
+        SELECT TOP 1 RoleId
+        FROM dbo.Roles_Dgci
+        WHERE RoleKey = @RoleKey
+      `);
 
     if (roleRow.recordset.length === 0) {
       await tx.rollback();
-      return NextResponse.json({ error: `RoleKey no existe: ${roleKey}` }, { status: 400 });
+
+      return NextResponse.json(
+        { error: `RoleKey no existe: ${roleKey}` },
+        { status: 400 }
+      );
     }
 
     const roleId = Number(roleRow.recordset[0].RoleId);
 
-    // ✅ ACTUALIZAR rol (no insertar duplicado)
     await new sql.Request(tx)
       .input("UserId", sql.UniqueIdentifier, userId)
       .input("RoleId", sql.Int, roleId)
@@ -95,12 +145,11 @@ export async function PUT(req: Request) {
         END
       `);
 
-    // 4) MÓDULOS: reemplazar (borrar e insertar)
     await new sql.Request(tx)
       .input("UserId", sql.UniqueIdentifier, userId)
-      .query(`DELETE FROM dbo.usuariosModulosPermisos WHERE UserId=@UserId`);
+      .query(`DELETE FROM dbo.usuariosModulosPermisos WHERE UserId = @UserId`);
 
-    if (Array.isArray(modules) && modules.length > 0) {
+    if (Array.isArray(modules)) {
       for (const m of modules) {
         await new sql.Request(tx)
           .input("UserId", sql.UniqueIdentifier, userId)
@@ -118,12 +167,11 @@ export async function PUT(req: Request) {
       }
     }
 
-    // 5) SUBMÓDULOS: reemplazar (borrar e insertar)
     await new sql.Request(tx)
       .input("UserId", sql.UniqueIdentifier, userId)
-      .query(`DELETE FROM dbo.usuariosSubmodulospermisos WHERE UserId=@UserId`);
+      .query(`DELETE FROM dbo.usuariosSubmodulospermisos WHERE UserId = @UserId`);
 
-    if (Array.isArray(permissions) && permissions.length > 0) {
+    if (Array.isArray(permissions)) {
       for (const p of permissions) {
         await new sql.Request(tx)
           .input("UserId", sql.UniqueIdentifier, userId)
@@ -141,15 +189,129 @@ export async function PUT(req: Request) {
       }
     }
 
+    await new sql.Request(tx)
+      .input("UserId", sql.UniqueIdentifier, userId)
+      .query(`DELETE FROM dbo.usuariosPrincipiosPermisos WHERE UserId = @UserId`);
+
+    if (Array.isArray(principles)) {
+      for (const p of principles) {
+        await new sql.Request(tx)
+          .input("UserId", sql.UniqueIdentifier, userId)
+          .input("SubModuleId", sql.Int, Number(p.subModuleId))
+          .input("PrincipioId", sql.Int, Number(p.principleId))
+          .input("CanView", sql.Bit, p.canView ? 1 : 0)
+          .input("CanCreate", sql.Bit, p.canCreate ? 1 : 0)
+          .input("CanEdit", sql.Bit, p.canEdit ? 1 : 0)
+          .input("CanDelete", sql.Bit, p.canDelete ? 1 : 0)
+          .query(`
+            INSERT INTO dbo.usuariosPrincipiosPermisos
+              (UserId, SubModuleId, PrincipioId, CanView, CanCreate, CanEdit, CanDelete)
+            VALUES
+              (@UserId, @SubModuleId, @PrincipioId, @CanView, @CanCreate, @CanEdit, @CanDelete)
+          `);
+      }
+    }
+
+    await new sql.Request(tx)
+      .input("UserId", sql.UniqueIdentifier, userId)
+      .query(`DELETE FROM dbo.usuariosPreguntasPermisos WHERE UserId = @UserId`);
+
+    if (Array.isArray(questions)) {
+      for (const q of questions) {
+        await new sql.Request(tx)
+          .input("UserId", sql.UniqueIdentifier, userId)
+          .input("SubModuleId", sql.Int, Number(q.subModuleId))
+          .input("QuestionId", sql.Int, Number(q.questionId))
+          .input("CanView", sql.Bit, q.canView ? 1 : 0)
+          .input("CanCreate", sql.Bit, q.canCreate ? 1 : 0)
+          .input("CanEdit", sql.Bit, q.canEdit ? 1 : 0)
+          .input("CanDelete", sql.Bit, q.canDelete ? 1 : 0)
+          .query(`
+            INSERT INTO dbo.usuariosPreguntasPermisos
+              (UserId, SubModuleId, QuestionId, CanView, CanCreate, CanEdit, CanDelete)
+            VALUES
+              (@UserId, @SubModuleId, @QuestionId, @CanView, @CanCreate, @CanEdit, @CanDelete)
+          `);
+      }
+    }
+
     await tx.commit();
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     try {
       await tx.rollback();
     } catch {}
+
     return NextResponse.json(
-      { error: "No se pudo actualizar", detail: String(e?.message || e) },
+      {
+        error: "No se pudo actualizar",
+        detail: String(e?.message || e),
+      },
       { status: 500 }
     );
   }
+}
+
+export async function DELETE(req: Request) {
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+
+  try {
+    const me = await requireAdmin();
+
+    if (!me) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+
+    const userId = getUserIdFromUrl(req);
+
+    if (!isGuid(userId)) {
+      return NextResponse.json(
+        { error: "UserId inválido", detail: userId },
+        { status: 400 }
+      );
+    }
+
+    await tx.begin();
+
+    await new sql.Request(tx)
+      .input("UserId", sql.UniqueIdentifier, userId)
+      .query(`
+        DELETE FROM dbo.usuariosPreguntasPermisos
+        WHERE UserId = @UserId;
+
+        DELETE FROM dbo.usuariosPrincipiosPermisos
+        WHERE UserId = @UserId;
+
+        DELETE FROM dbo.usuariosSubmodulospermisos
+        WHERE UserId = @UserId;
+
+        DELETE FROM dbo.usuariosModulosPermisos
+        WHERE UserId = @UserId;
+
+        DELETE FROM dbo.UserRoles_Dgci
+        WHERE UserId = @UserId;
+
+        DELETE FROM dbo.Usuarios_Dgci
+        WHERE UserId = @UserId;
+      `);
+
+    await tx.commit();
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    try {
+      await tx.rollback();
+    } catch {}
+
+    return NextResponse.json(
+      {
+        error: "No se pudo eliminar",
+        detail: String(e?.message || e),
+      },
+      { status: 500 }
+    );
+  }
+
 }

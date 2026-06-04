@@ -32,6 +32,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Plus, FileDown, Trash2, AlertTriangle } from "lucide-react";
+import { HashLoader } from "react-spinners";
+
 
 interface Document {
   DocumentId: number;
@@ -42,6 +44,9 @@ interface Document {
   Actualizado: boolean;
   Difundido: boolean;
   PdfUrl: string | null;
+  Fecha_elaborado?: string | null;
+  Fecha_Aprobado?: string | null;
+  Fecha_Actualizado?: string | null;
 }
 
 interface DocumentTableProps {
@@ -83,7 +88,10 @@ export function DocumentTable({
   const [loading, setLoading] = useState(false);
 
   const [newDocName, setNewDocName] = useState("");
-  const [newPdfFile, setNewPdfFile] = useState<File | null>(null);
+  const [newFile, setNewFile] = useState<File | null>(null);
+
+  const [newFechaAprobado, setNewFechaAprobado] = useState("");
+  const [newFechaActualizado, setNewFechaActualizado] = useState("");
 
   const [newStatus, setNewStatus] = useState({
     Elaborado: false,
@@ -95,9 +103,20 @@ export function DocumentTable({
 
   const [confirmData, setConfirmData] = useState<ConfirmState>(null);
 
+  const [pendingDateToggle, setPendingDateToggle] = useState<{
+    docId: number;
+    docName: string;
+    field: "Aprobado" | "Actualizado";
+    currentValue: boolean;
+  } | null>(null);
+
+  const [toggleDateValue, setToggleDateValue] = useState("");
+
   function resetForm() {
     setNewDocName("");
-    setNewPdfFile(null);
+    setNewFile(null);
+    setNewFechaAprobado("");
+    setNewFechaActualizado("");
     setNewStatus({
       Elaborado: false,
       Aprobado: false,
@@ -120,188 +139,233 @@ export function DocumentTable({
   }
 
   function canToggleStatus(currentStatus: typeof newStatus, field: StatusKey) {
-    switch (field) {
-      case "Elaborado":
-        return true;
-      case "Aprobado":
-        return currentStatus.Elaborado;
-      case "Implementado":
-        return currentStatus.Elaborado && currentStatus.Aprobado;
-      case "Actualizado":
-        return (
-          currentStatus.Elaborado &&
-          currentStatus.Aprobado &&
-          currentStatus.Implementado
-        );
-      case "Difundido":
-        return (
-          currentStatus.Elaborado &&
-          currentStatus.Aprobado &&
-          currentStatus.Implementado &&
-          currentStatus.Actualizado
-        );
-      default:
-        return false;
-    }
-  }
+  if (field === "Elaborado") return true;
+
+  // Si Elaborado está marcado, todas las demás se habilitan
+  return currentStatus.Elaborado;
+}
+
+  function canToggleExistingStatus(doc: Document, field: StatusKey) {
+  if (field === "Elaborado") return true;
+
+  // Si Elaborado está marcado, todas las demás se habilitan
+  return doc.Elaborado;
+}
 
   function handleNewStatusChange(field: StatusKey, checked: boolean) {
-    setNewStatus((prev) => {
-      const updated = { ...prev };
+  setNewStatus((prev) => {
+    const updated = { ...prev };
 
-      if (field === "Elaborado") {
-        updated.Elaborado = checked;
-        if (!checked) {
-          updated.Aprobado = false;
-          updated.Implementado = false;
-          updated.Actualizado = false;
-          updated.Difundido = false;
-        }
+    if (field === "Elaborado") {
+      updated.Elaborado = checked;
+
+      // Si se desmarca Elaborado, se limpian todas las demás
+      if (!checked) {
+        updated.Aprobado = false;
+        updated.Implementado = false;
+        updated.Actualizado = false;
+        updated.Difundido = false;
+        setNewFechaAprobado("");
+        setNewFechaActualizado("");
       }
 
-      if (field === "Aprobado") {
-        if (!prev.Elaborado) return prev;
-        updated.Aprobado = checked;
-        if (!checked) {
-          updated.Implementado = false;
-          updated.Actualizado = false;
-          updated.Difundido = false;
-        }
-      }
+      // Si se marca Elaborado, solo habilita las demás,
+      // pero NO las marca
+      return updated;
+    }
 
-      if (field === "Implementado") {
-        if (!prev.Elaborado || !prev.Aprobado) return prev;
-        updated.Implementado = checked;
-        if (!checked) {
-          updated.Actualizado = false;
-          updated.Difundido = false;
-        }
-      }
+    // Si no está Elaborado, no se puede tocar ninguna otra
+    if (!prev.Elaborado) return prev;
 
-      if (field === "Actualizado") {
-        if (!prev.Elaborado || !prev.Aprobado || !prev.Implementado) return prev;
-        updated.Actualizado = checked;
-        if (!checked) {
-          updated.Difundido = false;
-        }
-      }
+    if (field === "Aprobado") {
+      updated.Aprobado = checked;
+      return updated;
+    }
 
-      if (field === "Difundido") {
-        if (
-          !prev.Elaborado ||
-          !prev.Aprobado ||
-          !prev.Implementado ||
-          !prev.Actualizado
-        ) {
-          return prev;
-        }
-        updated.Difundido = checked;
+    if (field === "Implementado") {
+      updated.Implementado = checked;
+      return updated;
+    }
+
+    if (field === "Actualizado") {
+      updated.Actualizado = checked;
+
+      if (!checked) {
+        setNewFechaActualizado("");
       }
 
       return updated;
-    });
-  }
-
- async function handleToggle(
-  docId: number,
-  docName: string,
-  field: StatusKey,
-  currentValue: boolean
-) {
-  try {
-    const res = await fetch(`/api/documents/${docId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        field,
-        value: !currentValue,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      console.error("PATCH status:", res.status);
-      console.error("PATCH response:", data);
-      toast.error(data.error || data.sqlMessage || "Error al actualizar el estado");
-      return;
     }
 
-    setDocuments((prev) =>
-      prev.map((doc) =>
-        doc.DocumentId === docId ? { ...doc, [field]: !currentValue } : doc
-      )
-    );
+    if (field === "Difundido") {
+      updated.Difundido = checked;
+      return updated;
+    }
 
-    toast.success(
-      !currentValue
-        ? `El estado "${field}" fue aplicado correctamente`
-        : `El estado "${field}" fue removido correctamente`
-    );
-  } catch (error) {
-    console.error("PATCH fetch error:", error);
-    toast.error("Error de conexión al actualizar el estado");
-  }
+    return updated;
+  });
 }
 
-async function handleAddDocument() {
-  if (!newDocName.trim()) {
-    toast.error("Debe ingresar el nombre del documento");
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    const formData = new FormData();
-    formData.append("Nombre", newDocName.trim());
-    formData.append("SubModuleId", categoryValue);
-    formData.append("Elaborado", String(newStatus.Elaborado));
-    formData.append("Aprobado", String(newStatus.Aprobado));
-    formData.append("Implementado", String(newStatus.Implementado));
-    formData.append("Actualizado", String(newStatus.Actualizado));
-    formData.append("Difundido", String(newStatus.Difundido));
-
-    if (newPdfFile) {
-      formData.append("pdf", newPdfFile);
-    }
-
-    const res = await fetch("/api/documents", {
-      method: "POST",
-      body: formData,
-    });
-
-    const rawText = await res.text();
-    console.log("POST raw response:", rawText);
-
-    let data: any = null;
+  async function handleToggle(
+    docId: number,
+    docName: string,
+    field: StatusKey,
+    currentValue: boolean,
+    fecha?: string
+  ) {
     try {
-      data = rawText ? JSON.parse(rawText) : null;
-    } catch {
-      data = { rawText };
-    }
+      const res = await fetch(`/api/documents/${docId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          field,
+          value: !currentValue,
+          fecha,
+        }),
+      });
 
-    if (!res.ok) {
-      console.error("POST status:", res.status);
-      console.error("POST response:", data);
-      toast.error(data?.error || data?.sqlMessage || "Error al agregar documento");
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("PATCH status:", res.status);
+        console.error("PATCH response:", data);
+        toast.error(data.error || data.sqlMessage || "Error al actualizar el estado");
+        return;
+      }
+
+      setDocuments((prev) =>
+        prev.map((doc) => {
+          if (doc.DocumentId !== docId) return doc;
+
+          const updatedDoc: Document = {
+            ...doc,
+            [field]: !currentValue,
+          };
+
+          if (field === "Aprobado") {
+            updatedDoc.Fecha_Aprobado = !currentValue ? fecha || null : null;
+            if (currentValue) {
+              updatedDoc.Implementado = false;
+              updatedDoc.Actualizado = false;
+              updatedDoc.Difundido = false;
+              updatedDoc.Fecha_Actualizado = null;
+            }
+          }
+
+          if (field === "Actualizado") {
+            updatedDoc.Fecha_Actualizado = !currentValue ? fecha || null : null;
+            if (currentValue) {
+              updatedDoc.Difundido = false;
+            }
+          }
+
+          if (field === "Elaborado" && currentValue) {
+            updatedDoc.Aprobado = false;
+            updatedDoc.Implementado = false;
+            updatedDoc.Actualizado = false;
+            updatedDoc.Difundido = false;
+            updatedDoc.Fecha_Aprobado = null;
+            updatedDoc.Fecha_Actualizado = null;
+          }
+
+          if (field === "Implementado" && currentValue) {
+            updatedDoc.Actualizado = false;
+            updatedDoc.Difundido = false;
+            updatedDoc.Fecha_Actualizado = null;
+          }
+
+          return updatedDoc;
+        })
+      );
+
+      toast.success(
+        !currentValue
+          ? `El estado "${field}" fue aplicado correctamente`
+          : `El estado "${field}" fue removido correctamente`
+      );
+    } catch (error) {
+      console.error("PATCH fetch error:", error);
+      toast.error("Error de conexión al actualizar el estado");
+    }
+  }
+
+  async function handleAddDocument() {
+    if (!newDocName.trim()) {
+      toast.error("Debe ingresar el nombre del documento");
       return;
     }
 
-    setDocuments((prev) => [...prev, data]);
-    resetForm();
-    setDialogOpen(false);
+    if (newStatus.Aprobado && !newFechaAprobado) {
+      toast.error("Debe seleccionar la fecha de aprobado");
+      return;
+    }
 
-    toast.success("Documento agregado");
-  } catch (error) {
-    console.error("POST fetch error:", error);
-    toast.error("Error de conexión al agregar documento");
-  } finally {
-    setLoading(false);
+    if (newStatus.Actualizado && !newFechaActualizado) {
+      toast.error("Debe seleccionar la fecha de actualizado");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("Nombre", newDocName.trim());
+      formData.append("SubModuleId", categoryValue);
+      formData.append("Elaborado", String(newStatus.Elaborado));
+      formData.append("Aprobado", String(newStatus.Aprobado));
+      formData.append("Implementado", String(newStatus.Implementado));
+      formData.append("Actualizado", String(newStatus.Actualizado));
+      formData.append("Difundido", String(newStatus.Difundido));
+
+      if (newFechaAprobado) {
+        formData.append("Fecha_Aprobado", newFechaAprobado);
+      }
+
+      if (newFechaActualizado) {
+        formData.append("Fecha_Actualizado", newFechaActualizado);
+      }
+
+      if (newFile) {
+        formData.append("file", newFile);
+      }
+
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        body: formData,
+      });
+
+      const rawText = await res.text();
+      console.log("POST raw response:", rawText);
+
+      let data: any = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        data = { rawText };
+      }
+
+      if (!res.ok) {
+        console.error("POST status:", res.status);
+        console.error("POST response:", data);
+        toast.error(data?.error || data?.sqlMessage || "Error al agregar documento");
+        return;
+      }
+
+      setDocuments((prev) => [...prev, data]);
+      resetForm();
+      setDialogOpen(false);
+
+      toast.success("Documento agregado");
+    } catch (error) {
+      console.error("POST fetch error:", error);
+      toast.error("Error de conexión al agregar documento");
+    } finally {
+      setLoading(false);
+    }
   }
-}
+
   async function handleDelete(docId: number, docName: string) {
     try {
       const res = await fetch(`/api/documents/${docId}`, {
@@ -345,6 +409,23 @@ async function handleAddDocument() {
 
   return (
     <>
+{loading && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+    <div className="rounded-2xl bg-white p-8 shadow-2xl text-center">
+      <HashLoader
+        color="#084a89"
+        loading={true}
+        size={60}
+        speedMultiplier={1}
+      />
+
+      <p className="mt-4 text-sm font-medium text-slate-600">
+        Subiendo documento y enviando notificación...
+      </p>
+    </div>
+  </div>
+)}
+
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
@@ -409,19 +490,43 @@ async function handleAddDocument() {
                   </p>
                 </div>
 
+                {newStatus.Aprobado && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="fecha-aprobado">Fecha de aprobado</Label>
+                    <Input
+                      id="fecha-aprobado"
+                      type="date"
+                      value={newFechaAprobado}
+                      onChange={(e) => setNewFechaAprobado(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {newStatus.Actualizado && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="fecha-actualizado">Fecha de actualizado</Label>
+                    <Input
+                      id="fecha-actualizado"
+                      type="date"
+                      value={newFechaActualizado}
+                      onChange={(e) => setNewFechaActualizado(e.target.value)}
+                    />
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="pdf-file">Archivo PDF</Label>
+                  <Label htmlFor="doc-file">Archivo del documento</Label>
                   <Input
-                    id="pdf-file"
+                    id="doc-file"
                     type="file"
-                    accept="application/pdf"
+                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     onChange={(e) => {
                       const file = e.target.files?.[0] || null;
-                      setNewPdfFile(file);
+                      setNewFile(file);
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Seleccione el archivo PDF del documento.
+                    Seleccione un archivo PDF, DOC o DOCX.
                   </p>
                 </div>
 
@@ -445,7 +550,7 @@ async function handleAddDocument() {
                   </TableHead>
                 ))}
 
-                <TableHead className="w-[80px] text-center">PDF</TableHead>
+                <TableHead className="w-[80px] text-center">Archivo</TableHead>
                 <TableHead className="w-[60px]" />
               </TableRow>
             </TableHeader>
@@ -468,15 +573,30 @@ async function handleAddDocument() {
                         <div className="flex items-center justify-center">
                           <Checkbox
                             checked={doc[col.key]}
-                           onCheckedChange={() =>
-  setConfirmData({
-    type: "toggle",
-    docId: doc.DocumentId,
-    docName: doc.Nombre,
-    field: col.key,
-    currentValue: doc[col.key],
-  })
-}
+                            disabled={!canToggleExistingStatus(doc, col.key)}
+                            onCheckedChange={() => {
+                              if (
+                                (col.key === "Aprobado" || col.key === "Actualizado") &&
+                                !doc[col.key]
+                              ) {
+                                setToggleDateValue("");
+                                setPendingDateToggle({
+                                  docId: doc.DocumentId,
+                                  docName: doc.Nombre,
+                                  field: col.key,
+                                  currentValue: doc[col.key],
+                                });
+                                return;
+                              }
+
+                              setConfirmData({
+                                type: "toggle",
+                                docId: doc.DocumentId,
+                                docName: doc.Nombre,
+                                field: col.key,
+                                currentValue: doc[col.key],
+                              });
+                            }}
                           />
                         </div>
                       </TableCell>
@@ -517,45 +637,102 @@ async function handleAddDocument() {
         </div>
       </div>
 
-    <AlertDialog open={!!confirmData} onOpenChange={() => setConfirmData(null)}>
-  <AlertDialogContent className="sm:max-w-md">
-    <AlertDialogHeader>
-      <div className="mb-2 flex items-center gap-2">
-        <div className="rounded-full bg-amber-100 p-2 text-amber-600">
-          <AlertTriangle className="h-5 w-5" />
-        </div>
-        <AlertDialogTitle>
-          {confirmData?.type === "delete"
-            ? "Confirmar eliminación"
-            : "Confirmar acción"}
-        </AlertDialogTitle>
-      </div>
+      <AlertDialog open={!!confirmData} onOpenChange={() => setConfirmData(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mb-2 flex items-center gap-2">
+              <div className="rounded-full bg-amber-100 p-2 text-amber-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <AlertDialogTitle>
+                {confirmData?.type === "delete"
+                  ? "Confirmar eliminación"
+                  : "Confirmar acción"}
+              </AlertDialogTitle>
+            </div>
 
-      <AlertDialogDescription className="text-sm leading-6 text-muted-foreground">
-        {confirmData?.type === "toggle" &&
-          (() => {
-            const accion = confirmData.currentValue
-              ? `quitar el estado "${confirmData.field}"`
-              : `${getActionText(confirmData.field)}`;
+            <AlertDialogDescription className="text-sm leading-6 text-muted-foreground">
+              {confirmData?.type === "toggle" &&
+                (() => {
+                  const accion = confirmData.currentValue
+                    ? `quitar el estado "${confirmData.field}"`
+                    : `${getActionText(confirmData.field)}`;
 
-            return `¿Desea ${accion} el documento "${confirmData.docName}"?`;
-          })()}
+                  return `¿Desea ${accion} el documento "${confirmData.docName}"?`;
+                })()}
 
-        {confirmData?.type === "delete" &&
-          `¿Desea eliminar el documento "${confirmData.docName}"? Esta acción también quedará registrada en auditoría.`}
-      </AlertDialogDescription>
-    </AlertDialogHeader>
+              {confirmData?.type === "delete" &&
+                `¿Desea eliminar el documento "${confirmData.docName}"? Esta acción también quedará registrada en auditoría.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
 
-    <AlertDialogFooter>
-      <AlertDialogCancel onClick={() => setConfirmData(null)}>
-        Cancelar
-      </AlertDialogCancel>
-      <AlertDialogAction onClick={handleConfirmAction}>
-        Confirmar
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmData(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmAction}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={!!pendingDateToggle}
+        onOpenChange={() => {
+          setPendingDateToggle(null);
+          setToggleDateValue("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingDateToggle?.field === "Aprobado"
+                ? "Seleccionar fecha de aprobado"
+                : "Seleccionar fecha de actualizado"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 pt-2">
+            <Label htmlFor="toggle-date">
+              {pendingDateToggle?.field === "Aprobado"
+                ? "Fecha de aprobado"
+                : "Fecha de actualizado"}
+            </Label>
+
+            <Input
+              id="toggle-date"
+              type="date"
+              value={toggleDateValue}
+              onChange={(e) => setToggleDateValue(e.target.value)}
+            />
+
+            <Button
+              onClick={async () => {
+                if (!pendingDateToggle) return;
+
+                if (!toggleDateValue) {
+                  toast.error("Debe seleccionar una fecha");
+                  return;
+                }
+
+                await handleToggle(
+                  pendingDateToggle.docId,
+                  pendingDateToggle.docName,
+                  pendingDateToggle.field,
+                  pendingDateToggle.currentValue,
+                  toggleDateValue
+                );
+
+                setPendingDateToggle(null);
+                setToggleDateValue("");
+              }}
+            >
+              Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

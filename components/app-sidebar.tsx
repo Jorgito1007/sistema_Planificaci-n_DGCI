@@ -55,18 +55,23 @@ const porComponentesSubModules = [
   { id: 10, key: "sa_AControl", title: "Actividades de Control", href: "/dashboard/por-componentes/actividades-control" },
   { id: 11, key: "sa_IyC", title: "Información y Comunicación", href: "/dashboard/por-componentes/Informa-Comuni" },
   { id: 12, key: "sa_ASupervision", title: "Actividades de Supervisión", href: "/dashboard/por-componentes/actividad-supervision" },
+  { id: 13, key: "sa_Resultados", title: "Resultados", href: "/dashboard/por-componentes/Resultados" },
+  { id: 14, key: "sa_Psinresponder", title: "Preguntas sin Responder", href: "/dashboard/por-componentes/Preguntas_Sresponder" },
+  { id: 15, key: "sa_Planaccion", title: "Plan de Acción", href: "/dashboard/por-componentes/Plan_Accion" },
 ];
 
 const matrizSistemaAdminSubModules = [
-  { id: 13, title: "Administración de Talento Humano", href: "/dashboard/matriz_sa/ma_talento_humano" },
-  { id: 14, title: "Planeación y Programación", href: "/dashboard/matriz_sa/ma_planeacion" },
-  { id: 15, title: "Presupuesto", href: "/dashboard/matriz_sa/ma_presupuesto" },
-  { id: 16, title: "Administración Financiera", href: "/dashboard/matriz_sa/ma_financiera" },
-  { id: 17, title: "Contabilidad Integrada", href: "/dashboard/matriz_sa/ma_ConIntegrada" },
-  { id: 18, title: "Contratación y Administración de Bienes y Servicios", href: "/dashboard/matriz_sa/ma_contbys" },
-  { id: 19, title: "Tecnología de la Información", href: "/dashboard/matriz_sa/ma_TIC" },
-  { id: 20, title: "Inversiones en Programas y Proyectos", href: "/dashboard/matriz_sa/ma_InvPoyect" },
-  { id: 21, title: "Resultados", href: "/dashboard/matriz_sa/Resultados" },
+  { id: 16, title: "Administración de Talento Humano", href: "/dashboard/matriz_sa/ma_talento_humano" },
+  { id: 17, title: "Planeación y Programación", href: "/dashboard/matriz_sa/ma_planeacion" },
+  { id: 18, title: "Presupuesto", href: "/dashboard/matriz_sa/ma_presupuesto" },
+  { id: 19, title: "Administración Financiera", href: "/dashboard/matriz_sa/ma_financiera" },
+  { id: 20, title: "Contabilidad Integrada", href: "/dashboard/matriz_sa/ma_ConIntegrada" },
+  { id: 21, title: "Contratación y Administración de Bienes y Servicios", href: "/dashboard/matriz_sa/ma_contbys" },
+  { id: 22, title: "Tecnología de la Información", href: "/dashboard/matriz_sa/ma_TIC" },
+  { id: 23, title: "Inversiones en Programas y Proyectos", href: "/dashboard/matriz_sa/ma_InvPoyect" },
+  { id: 24, title: "Resultados", href: "/dashboard/matriz_sa/Resultados" },
+  { id: 25, title: "Preguntas sin Responder", href: "/dashboard/matriz_sa/Preguntas_Sresponder" },
+  { id: 26, title: "Plan de Acción", href: "/dashboard/matriz_sa/Plan_Accion" },
 ];
 
 interface AppSidebarProps {
@@ -170,9 +175,7 @@ const canSeeMatrizSistemaAdmin =
           {!collapsed && (
       <div className="flex min-w-0 flex-col">
     
-        <span className="text-xs text-center text-sidebar-foreground/80">
-          Sistema de Control Interno
-        </span>
+      
       </div>
     )}
   </div>
@@ -258,15 +261,19 @@ const canSeeMatrizSistemaAdmin =
                 key={sub.href}
                 className="border-b border-white/10 last:border-none"
               >
-                <SidebarMenuSubButton asChild isActive={pathname === sub.href}>
-                  <Link
-                    href={sub.href}
-                    className="block text-[12px] leading-3 whitespace-normal break-words py-2 px-1"
-                    title={sub.title}
-                  >
-                    {sub.title}
-                  </Link>
-                </SidebarMenuSubButton>
+                <SidebarMenuSubButton
+  asChild
+  isActive={pathname === sub.href}
+  className="h-auto min-h-[4px] items-start py-2"
+>
+  <Link
+    href={sub.href}
+    className="block w-full px-2 py-1 text-[12px] leading-3 whitespace-normal break-words"
+    title={sub.title}
+  >
+    {sub.title}
+  </Link>
+</SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
           </SidebarMenuSub>
@@ -339,16 +346,7 @@ const canSeeMatrizSistemaAdmin =
                 </SidebarMenuItem>
               )}
 
-              {canSeeAuditoria && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname.includes("/auditoria")}>
-                    <Link href="/dashboard/auditoria">
-                      <ScrollText className="h-4 w-4" />
-                      {!collapsed && <span>Auditoría</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
+          
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

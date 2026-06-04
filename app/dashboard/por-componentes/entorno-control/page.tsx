@@ -51,6 +51,12 @@ type RegistroPrincipio = {
   preguntas: PreguntaDetalleForm[];
 };
 
+interface Cargo {
+  Id: number;
+  CargoKey: string;
+  NombreCargo: string;
+}
+
 
 
 const PRINCIPIOS: Principio[] = [
@@ -153,6 +159,11 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
 export default function EntornoControlPage() {
  const SUBMODULE_KEY = "sa_Entornocontrol";
 
+ const [cargos, setCargos] = useState<Cargo[]>([]);
+
+const [isFullAccess, setIsFullAccess] = useState(false);
+const [principiosPermitidos, setPrincipiosPermitidos] = useState<number[]>([]);
+
   const [open, setOpen] = useState(false);
   const [principioActual, setPrincipioActual] = useState<Principio | null>(null);
 
@@ -163,6 +174,53 @@ export default function EntornoControlPage() {
 
   const [preguntasDetalle, setPreguntasDetalle] = useState<PreguntaDetalleForm[]>([]);
   const [registros, setRegistros] = useState<RegistroPrincipio[]>([]);
+
+
+//permisos de usuario sobre la edicion de principios
+const cargarPermisosPrincipios = async () => {
+  
+  const res = await fetch(
+    
+    `/api/permisos/principios?subModuleKey=${SUBMODULE_KEY}`,
+    { credentials: "include" }
+    
+  );
+
+  const data = await res.json();
+console.log("PERMISOS PRINCIPIOS:", data);
+  if (!res.ok || !data.ok) return;
+
+  setIsFullAccess(data.isFullAccess);
+
+  const ids = (data.principios || []).map((p: any) =>
+    Number(p.PrincipioId)
+  );
+
+  setPrincipiosPermitidos(ids);
+};
+
+const puedeUsarPrincipio = (principioId: number) => {
+  return (
+    isFullAccess ||
+    principiosPermitidos.includes(Number(principioId))
+  );
+};
+
+async function cargarCargos() {
+  try {
+    const res = await fetch("/api/cargos");
+
+    if (!res.ok) {
+      throw new Error("Error cargando cargos");
+    }
+
+    const data = await res.json();
+
+    setCargos(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
 
   const cargarRegistros = async () => {
     try {
@@ -186,6 +244,8 @@ export default function EntornoControlPage() {
 
     useEffect(() => {
     cargarRegistros();
+     cargarPermisosPrincipios();
+     cargarCargos();
   }, []);
 
   const abrirModal = (principio: Principio) => {
@@ -277,6 +337,7 @@ export default function EntornoControlPage() {
     try {
       const res = await fetch("/api/control-interno/guardar", {
         method: "POST",
+        credentials:"include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -327,19 +388,42 @@ export default function EntornoControlPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {PRINCIPIOS.map((principio) => (
-          <button
-            key={principio.id}
-            type="button"
-            onClick={() => abrirModal(principio)}
-            className={`${principio.color} rounded-2xl p-5 text-left text-white shadow-md transition hover:scale-[1.02]`}
-          >
-            <h3 className="text-lg font-bold">{principio.titulo}</h3>
-            <p className="mt-2 text-sm opacity-90">Registrar o editar contenido</p>
-          </button>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+  {PRINCIPIOS.map((principio) => {
+
+    const habilitado = puedeUsarPrincipio(Number(principio.id));
+
+    return (
+      <button
+        key={principio.id}
+        type="button"
+        onClick={() => {
+          if (!habilitado) return;
+
+          abrirModal(principio);
+        }}
+        disabled={!habilitado}
+        className={`rounded-2xl p-5 text-left text-white shadow-md transition
+          ${
+            habilitado
+              ? `${principio.color} hover:scale-[1.02] cursor-pointer`
+              : "bg-gray-400 cursor-not-allowed opacity-60"
+          }
+        `}
+      >
+        <h3 className="text-lg font-bold">
+          {principio.titulo}
+        </h3>
+
+        <p className="mt-2 text-sm opacity-90">
+          {habilitado
+            ? "Registrar o editar contenido"
+            : "Sin permisos"}
+        </p>
+      </button>
+    );
+  })}
+</div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-100 px-4 py-3">
@@ -454,9 +538,9 @@ export default function EntornoControlPage() {
                         <td className="border px-2 py-2 text-center align-top">{pregunta.numero}</td>
                         <td className="border px-2 py-2 align-top">{pregunta.texto}</td>
 
-                        <td className="border px-2 py-2 align-middle text-center font-medium">
-                          {pregunta.cargo}
-                        </td>
+                     <td className="border px-2 py-2 align-top">
+  {pregunta.cargo || "-"}
+</td>
 
                         <td className="border px-2 py-2 text-center align-top">{pregunta.existe}</td>
                         <td className="border px-2 py-2 text-center align-top">{pregunta.aprobado}</td>
@@ -619,16 +703,25 @@ export default function EntornoControlPage() {
                     
 {/* FILA 1 */}
 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
-  <div className="md:col-span-2">
-    <label className="mb-1 block text-sm font-medium">Cargo</label>
-    <input
-      className="w-full rounded-md border px-3 py-2"
-      value={pregunta.cargo}
-      onChange={(e) =>
-        actualizarPreguntaDetalle(index, "cargo", e.target.value)
-      }
-    />
-  </div>
+ <div className="md:col-span-2">
+  <label className="mb-1 block text-sm font-medium">Cargo</label>
+
+  <select
+    className="w-full rounded-md border px-3 py-2"
+    value={pregunta.cargo || ""}
+    onChange={(e) =>
+      actualizarPreguntaDetalle(index, "cargo", e.target.value)
+    }
+  >
+    <option value="">Seleccione un cargo</option>
+
+    {cargos.map((cargo) => (
+      <option key={cargo.Id} value={cargo.NombreCargo}>
+        {cargo.NombreCargo}
+      </option>
+    ))}
+  </select>
+</div>
 
   <CampoBinario label="Existe" value={pregunta.existe} onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)} />
   <CampoBinario label="Aprobado" value={pregunta.aprobado} onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)} />

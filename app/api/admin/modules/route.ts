@@ -1,60 +1,166 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
 import { getPool } from "@/lib/db";
-
-function requireAdmin(payload: any) {
-  const role = String(payload?.role || "").toLowerCase();
-  if (role !== "administrador") throw new Error("No autorizado");
-}
+import { getCurrentUser } from "@/lib/current-user";
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
-    if (!token) return NextResponse.json({ error: "No auth" }, { status: 401 });
 
-    const secret = process.env.JWT_SECRET!;
-    const payload = jwt.verify(token, secret) as any;
-    requireAdmin(payload);
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: "No auth" },
+        { status: 401 }
+      );
+    }
+
+    const role = String(
+      currentUser.role || ""
+    ).toLowerCase();
+
+    if (role !== "administrador") {
+      return NextResponse.json(
+        { error: "No autorizado" },
+        { status: 403 }
+      );
+    }
 
     const pool = await getPool();
 
     const modulesRes = await pool.request().query(`
-           SELECT ModuleId, ModuleKey, ModuleName
-      FROM Modulos_Dgci
-      ORDER BY  ModuleId ASC
+      SELECT
+        ModuleId,
+        ModuleKey,
+        ModuleName
+      FROM dbo.Modulos_Dgci
+      ORDER BY ModuleId ASC
     `);
 
     const subRes = await pool.request().query(`
-      SELECT SubModuleId, ModuleId, SubModuleKey, SubModuleName, SortOrder
-      FROM submodulos_dgci
-      ORDER BY SortOrder ASC, SubModuleName ASC
+      SELECT
+        SubModuleId,
+        ModuleId,
+        SubModuleKey,
+        SubModuleName,
+        SortOrder
+      FROM dbo.submodulos_dgci
+      ORDER BY SortOrder ASC
     `);
 
-    // Agrupar submódulos por ModuleId
-    const subByModule = new Map<string, any[]>();
-    for (const s of subRes.recordset) {
-      const k = String(s.ModuleId);
+    //Preguntas del sistema administrativo
+const questionsRes = await pool.request().query(`
+  SELECT
+    msa.SubModuleId,
+    msad.Id AS QuestionId,
+    msad.MatrizSistemaAdministrativoId,
+    msad.Numero,
+    msad.Texto
+  FROM dbo.Matriz_SistemaAdministrativoDetalle msad
+  INNER JOIN dbo.Matriz_SistemaAdministrativo msa
+    ON msa.Id = msad.MatrizSistemaAdministrativoId
+  ORDER BY
+    msa.SubModuleId ASC,
+    msad.MatrizSistemaAdministrativoId ASC,
+    msad.Numero ASC
+`);
 
-      if (!subByModule.has(k)) subByModule.set(k, []);
-      subByModule.get(k)!.push({
-        id: String(s.SubModuleId),
-        key: s.SubModuleKey,
-        name: s.SubModuleName,
-      });
-    }
+// =========================
+// AGRUPAR Matriz del SA
+// =========================
 
-    // Formatear módulos
+const questionsBySubmodule = new Map<string, any[]>();
+
+for (const q of questionsRes.recordset) {
+  const subId = String(q.SubModuleId);
+
+  if (!questionsBySubmodule.has(subId)) {
+    questionsBySubmodule.set(subId, []);
+  }
+
+  questionsBySubmodule.get(subId)!.push({
+    id: String(q.QuestionId),
+    parentId: String(q.MatrizSistemaAdministrativoId),
+    number: String(q.Numero ?? ""),
+    text: q.Texto,
+  });
+}
+
+
+//Principios del modulo por componentes
+const principlesRes = await pool.request().query(`
+  SELECT
+    SubModuleId,
+    PrincipioId,
+    PrincipioTitulo,
+    PreguntaGeneralNumero,
+    PreguntaGeneralTexto
+  FROM dbo.EvaluacionesPrincipioDGCI
+  ORDER BY SubModuleId ASC, PrincipioId ASC
+`);
+// =========================
+// AGRUPAR PRINCIPIOS
+// =========================
+const principlesBySubmodule = new Map<string, any[]>();
+
+for (const p of principlesRes.recordset) {
+  const key = String(p.SubModuleId);
+
+  if (!principlesBySubmodule.has(key)) {
+    principlesBySubmodule.set(key, []);
+  }
+
+  principlesBySubmodule.get(key)!.push({
+    id: String(p.PrincipioId),
+    title: p.PrincipioTitulo,
+    number: String(p.PreguntaGeneralNumero ?? ""),
+    text: p.PreguntaGeneralTexto,
+  });
+}
+
+// =========================
+// AGRUPAR SUBMÓDULOS
+// =========================
+
+
+const subByModule = new Map<string, any[]>();
+
+for (const s of subRes.recordset) {
+  const k = String(s.ModuleId);
+
+  if (!subByModule.has(k)) {
+    subByModule.set(k, []);
+  }
+
+ const subId = String(s.SubModuleId);
+
+
+subByModule.get(k)!.push({
+  id: subId,
+  key: s.SubModuleKey,
+  name: s.SubModuleName,
+  principles: principlesBySubmodule.get(subId) ?? [],
+  questions: questionsBySubmodule.get(subId) ?? [],
+});
+}
+
+
     const modules = modulesRes.recordset.map((m: any) => ({
       id: String(m.ModuleId),
       key: m.ModuleKey,
       name: m.ModuleName,
-      submodules: subByModule.get(String(m.ModuleId)) ?? [],
+      submodules:
+        subByModule.get(String(m.ModuleId)) || [],
     }));
-
+console.log("QUESTIONS:", questionsBySubmodule);
     return NextResponse.json({ modules });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
+
+  } catch (error: any) {
+
+    console.error(error);
+
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
 }

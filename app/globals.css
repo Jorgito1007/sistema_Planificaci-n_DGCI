@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -97,4 +98,31 @@ body {
 .custom-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(120, 140, 170, 0.4) transparent;
+}
+
+.pdf-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 24px;
+}
+
+.pdf-wide-table {
+  width: max-content !important;
+  min-width: 1350px;
+  table-layout: fixed;
+}
+
+.pdf-wide-table th,
+.pdf-wide-table td {
+  font-size: 10px;
+  padding: 4px 5px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+@media print {
+  .pdf-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }

@@ -100,6 +100,13 @@ function crearPreguntaDetalleVacia(correlativo: number): PreguntaDetalleForm {
   };
 }
 
+
+interface Cargo {
+  Id: number;
+  CargoKey: string;
+  NombreCargo: string;
+}
+
 function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
   const calificacion = calcularCalificacion({
     existe: p.existe,
@@ -120,6 +127,8 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
 
 export default function MatrizAdmonfinancieraPage() {
   const SUBMODULE_KEY = "m_financiera";
+    const [cargos, setCargos] = useState<Cargo[]>([]);
+const [roleKey, setRoleKey] = useState("");
 
   const [open, setOpen] = useState(false);
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
@@ -128,6 +137,10 @@ export default function MatrizAdmonfinancieraPage() {
     useState<PreguntaDetalleForm | null>(null);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+
+const puedeAgregarItems =
+  roleKey === "administrador" || roleKey === "subadministrador";
 
   const cargarRegistros = async () => {
     try {
@@ -148,8 +161,26 @@ export default function MatrizAdmonfinancieraPage() {
     }
   };
 
+  async function cargarCargos() {
+  try {
+    const res = await fetch("/api/cargos");
+
+    if (!res.ok) {
+      throw new Error("Error cargando cargos");
+    }
+
+    const data = await res.json();
+
+    setCargos(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+
   useEffect(() => {
     cargarRegistros();
+    cargarCargos();
   }, []);
 
 const abrirNuevaPregunta = () => {
@@ -241,6 +272,7 @@ const abrirNuevaPregunta = () => {
     try {
       const res = await fetch("/api/matriz-sistema-administrativo/guardar", {
         method: "POST",
+        credentials:"include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -323,9 +355,12 @@ const abrirNuevaPregunta = () => {
       </div>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" onClick={abrirNuevaPregunta}>
-          Agregar items
-        </Button>
+     
+     {puedeAgregarItems && (
+  <Button type="button" onClick={abrirNuevaPregunta}>
+    Agregar items
+  </Button>
+)}
 
         <Button
           type="button"
@@ -488,9 +523,10 @@ const abrirNuevaPregunta = () => {
                       {pregunta.numero}
                     </td>
                     <td className="border px-2 py-2">{pregunta.texto}</td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.cargo}
-                    </td>
+                                <td className="border px-2 py-2 align-top">
+  {pregunta.cargo || "-"}
+</td>
+
                     <td className="border px-2 py-2 text-center">
                       {pregunta.existe}
                     </td>
@@ -584,17 +620,33 @@ const abrirNuevaPregunta = () => {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
-                  <div className="md:col-span-2">
-                    <label className="mb-1 block text-sm font-medium">
-                      Cargo
-                    </label>
-                    <input
-                      className="w-full rounded-md border px-3 py-2"
-                      value={preguntaEditando.cargo}
-                      onChange={(e) => actualizarCampo("cargo", e.target.value)}
-                    />
-                  </div>
+                  
+                  <div className="col-span-2">
+  <label className="mb-1 block text-sm font-medium">
+    Cargo
+  </label>
 
+  <select
+    className="w-full rounded-md border px-3 py-2"
+    value={preguntaEditando.cargo || ""}
+    onChange={(e) =>
+      actualizarCampo("cargo", e.target.value)
+    }
+  >
+    <option value="">
+      Seleccione un cargo
+    </option>
+
+    {cargos.map((cargo) => (
+      <option
+        key={cargo.Id}
+        value={cargo.NombreCargo}
+      >
+        {cargo.NombreCargo}
+      </option>
+    ))}
+  </select>
+</div>
                   <CampoBinario
                     label="Existe"
                     value={preguntaEditando.existe}
