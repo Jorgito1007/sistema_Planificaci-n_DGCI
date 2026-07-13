@@ -521,11 +521,8 @@ async function cargarCargos() {
                 </th>
               </tr>
 
-              <tr className="bg-[#eef4fb] text-center">
-                <th className="border px-2 py-2"></th>
-              </tr>
+           
             </thead>
-
             <tbody>
               {registrosOrdenados.length === 0 ? (
                 <tr>

@@ -25,24 +25,14 @@ type PlanRow = {
   FullName: string;
 };
 
-export default async function PlanAccionPDFPage({
-  searchParams,
-}: Props) {
-
+export default async function PlanAccionPDFPage({ searchParams }: Props) {
   const params = await searchParams;
 
   const tipo = params.tipo;
   const userId = params.userId;
 
-  console.log("TIPO:", tipo);
-  console.log("USER:", userId);
-
   if (!tipo || !userId) {
-    return (
-      <div className="p-6 text-red-600">
-        Faltan parámetros del plan.
-      </div>
-    );
+    return <div className="p-6 text-red-600">Faltan parámetros del plan.</div>;
   }
 
   const pool = await getPool();
@@ -86,112 +76,155 @@ export default async function PlanAccionPDFPage({
 
   const titulo =
     tipo === "sistema-administrativo"
-      ? "PLAN DE ACCIÓN PARA LA IMPLEMENTACIÓN DE LAS ACTIVIDADES DE MEJORA DEL SISTEMA DE ADMINISTRACIÓN"
-      : "PLAN DE ACCIÓN PARA LA IMPLEMENTACIÓN DE LAS ACTIVIDADES DE MEJORA POR COMPONENTES";
+      ? "Plan de Acción Sistema Administrativo"
+      : "Plan de Acción por Componentes";
 
   return (
-    <div className="min-h-screen bg-white p-6 text-black print:p-0">
-      <div className="mb-4 flex justify-end print:hidden">
+    <div className="min-h-screen bg-slate-100 p-6 text-black print:bg-white print:p-0">
+      <div className="mx-auto max-w-[1500px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl print:rounded-none print:border-none print:shadow-none">
+        <div className="bg-gradient-to-r from-[#061B33] via-[#0B3D91] to-[#1565C0] px-8 py-6 text-white">
+          <h1 className="text-2xl font-extrabold uppercase tracking-wide">
+            {titulo}
+          </h1>
 
+          <p className="mt-1 text-sm font-medium text-blue-100">
+            Seguimiento institucional del Sistema de Control Interno
+          </p>
+        </div>
 
-      </div>
-
-      <div className="mx-auto max-w-[1400px] border border-black p-4">
-        <h1 className="text-center text-sm font-bold uppercase">
-          Contraloría General de la República
-        </h1>
-
-        <h2 className="mt-2 text-center text-xs font-bold uppercase">
-          Guía especializada para la implementación del control interno en las
-          instituciones gubernamentales
-        </h2>
-
-        <h3 className="mt-3 text-center text-sm font-bold uppercase">
-          {titulo}
-        </h3>
-
-        <div className="mt-5 grid grid-cols-12 text-sm">
-          <div className="col-span-2 font-bold">ENTIDAD:</div>
-          <div className="col-span-10">
-            Universidad Nacional Casimiro Sotelo Montenegro
+        <div className="grid grid-cols-2 gap-6 bg-gradient-to-r from-slate-50 to-blue-50 px-8 py-5 text-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#0B3D91]">
+              Entidad
+            </p>
+            <p className="mt-1 font-semibold text-slate-800">
+              Universidad Nacional Casimiro Sotelo Montenegro
+            </p>
           </div>
 
-          <div className="col-span-2 mt-2 font-bold">PERÍODO:</div>
-          <div className="col-span-10 mt-2">
-            Del: {periodoInicio} Al: {periodoFin}
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#0B3D91]">
+              Período
+            </p>
+            <p className="mt-1 font-semibold text-slate-800">
+              Del: {periodoInicio} &nbsp;&nbsp; Al: {periodoFin}
+            </p>
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full border-collapse text-[11px]">
-            <thead>
-              <tr className="bg-slate-100">
-                <th className="border border-black p-1">Número Pregunta</th>
-                <th className="border border-black p-1">Descripción</th>
-                <th className="border border-black p-1">Clasificación</th>
-                <th className="border border-black p-1">Nivel</th>
-                <th className="border border-black p-1">Deficiencia</th>
-                <th className="border border-black p-1">Actividades</th>
-                <th className="border border-black p-1">Fecha Inicio</th>
-                <th className="border border-black p-1">Fecha Fin</th>
-                <th className="border border-black p-1">Nombre Cargo</th>
-                <th className="border border-black p-1">Contacto</th>
-                <th className="border border-black p-1">Recursos</th>
-                <th className="border border-black p-1">Entregable</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filas.map((fila, index) => (
-                <tr key={index}>
-                  <td className="border border-black p-1 text-center">
-                    {fila.NumeroPregunta}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.DescripcionPregunta}
-                  </td>
-                  <td className="border border-black p-1 text-center">
-                    {fila.Clasificacion}
-                  </td>
-                  <td className="border border-black p-1 text-center">
-                    {fila.Nivel}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.Deficiencia}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.Actividades}
-                  </td>
-                  <td className="border border-black p-1 text-center">
-                    {fila.FechaInicio}
-                  </td>
-                  <td className="border border-black p-1 text-center">
-                    {fila.FechaFin}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.FullName}
-                    <br />
-                    {fila.Cargo}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.Contacto}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.Recursos}
-                  </td>
-                  <td className="border border-black p-1">
-                    {fila.Entregable}
-                  </td>
+        <div className="p-6">
+          <div className="overflow-x-auto rounded-xl border border-slate-300">
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-[#0B3D91] text-center text-white">
+                  <th className="border border-slate-300 p-2">
+                    Número Pregunta
+                  </th>
+                  <th className="border border-slate-300 p-2">
+                    Descripción
+                  </th>
+                  <th className="border border-slate-300 p-2">
+                    Clasificación
+                  </th>
+                  <th className="border border-slate-300 p-2">Nivel</th>
+                  <th className="border border-slate-300 p-2">
+                    Deficiencia
+                  </th>
+                  <th className="border border-slate-300 p-2">
+                    Actividades
+                  </th>
+                  <th className="border border-slate-300 p-2">
+                    Fecha Inicio
+                  </th>
+                  <th className="border border-slate-300 p-2">Fecha Fin</th>
+                  <th className="border border-slate-300 p-2">Nombre</th>
+                  <th className="border border-slate-300 p-2">Cargo</th>
+                  <th className="border border-slate-300 p-2">Contacto</th>
+                  <th className="border border-slate-300 p-2">Recursos</th>
+                  <th className="border border-slate-300 p-2">Entregable</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
 
-        <p className="mt-6 text-[11px]">
-          <strong>NOTA:</strong> Este anexo se imprimirá directamente desde la
-          Matriz de Evaluación de Control Interno.
-        </p>
+              <tbody>
+                {filas.map((fila, index) => (
+                  <tr
+                    key={index}
+                    className="odd:bg-white even:bg-slate-50 print:odd:bg-white print:even:bg-white"
+                  >
+                    <td className="border border-slate-300 p-2 text-center font-semibold">
+                      {fila.NumeroPregunta}
+                    </td>
+
+                    <td className="border border-slate-300 p-2 leading-relaxed">
+                      {fila.DescripcionPregunta}
+                    </td>
+
+                    <td className="border border-slate-300 p-2 text-center">
+                      {fila.Clasificacion}
+                    </td>
+
+                    <td className="border border-slate-300 p-2 text-center">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                          fila.Nivel?.toLowerCase() === "bajo"
+                            ? "bg-red-500 text-white"
+                            : fila.Nivel?.toLowerCase() === "medio"
+                            ? "bg-yellow-300 text-black"
+                            : fila.Nivel?.toLowerCase() === "alto"
+                            ? "bg-green-500 text-white"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {fila.Nivel}
+                      </span>
+                    </td>
+
+                    <td className="border border-slate-300 p-2">
+                      {fila.Deficiencia}
+                    </td>
+
+                    <td className="border border-slate-300 p-2">
+                      {fila.Actividades}
+                    </td>
+
+                    <td className="border border-slate-300 p-2 text-center">
+                      {fila.FechaInicio}
+                    </td>
+
+                    <td className="border border-slate-300 p-2 text-center">
+                      {fila.FechaFin}
+                    </td>
+
+                    <td className="border border-slate-300 bg-blue-50 p-2 font-semibold text-slate-700">
+                      {fila.FullName}
+                    </td>
+
+                    <td className="border border-slate-300 bg-blue-50 p-2 text-slate-700">
+                      {fila.Cargo}
+                    </td>
+
+                    <td className="border border-slate-300 p-2">
+                      {fila.Contacto}
+                    </td>
+
+                    <td className="border border-slate-300 p-2">
+                      {fila.Recursos}
+                    </td>
+
+                    <td className="border border-slate-300 p-2">
+                      {fila.Entregable}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-5 rounded-xl border-l-4 border-[#0B3D91] bg-blue-50 p-4 text-[12px] text-slate-700 print:border print:border-slate-300">
+            <strong>NOTA:</strong> Este documento forma parte del seguimiento
+            institucional del Sistema de Control Interno.
+          </div>
+        </div>
       </div>
     </div>
   );

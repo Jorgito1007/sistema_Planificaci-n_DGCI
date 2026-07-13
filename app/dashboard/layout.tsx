@@ -5,9 +5,12 @@ import { redirect } from "next/navigation";
 import jwt from "jsonwebtoken";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
-import { Menu } from "lucide-react";
+import { Topbar } from "@/components/topbar";
+import {
+  SidebarProvider,
+  SidebarInset,
+} from "@/components/ui/sidebar";
+
 import { getUserByEmail } from "@/lib/current-user";
 
 type SidebarUser = {
@@ -16,10 +19,13 @@ type SidebarUser = {
   role: string;
 };
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   let user: SidebarUser | null = null;
 
-  // 1. Intentar con Google
   const session = await auth();
 
   if (session?.user?.email?.endsWith("@uncsm.edu.ni")) {
@@ -36,7 +42,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     };
   }
 
-  // 2. Si no hay sesión Google, usar JWT tradicional
   if (!user) {
     const cookieStore = await cookies();
     const token = cookieStore.get("auth_token")?.value;
@@ -59,22 +64,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
-  return (
-    <SidebarProvider
-      defaultOpen={true}
-      className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
-    >
-      <AppSidebar user={user} />
-      <SidebarInset className="min-w-0">
-        <div className="flex h-14 items-center gap-3 px-4">
-          <SidebarTrigger className="h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">
-            <Menu className="h-5 w-5" />
-          </SidebarTrigger>
-          <Separator orientation="vertical" className="h-6" />
-        </div>
+ return (
+  <SidebarProvider
+    defaultOpen={true}
+    className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
+  >
+    <AppSidebar user={user} />
 
-        <div className="p-4">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
-  );
+    <SidebarInset className="min-w-0 bg-slate-50 overflow-hidden ">
+      <Topbar user={user} />
+
+      <main className="h-[calc(100vh-3.5rem)] overflow-auto p-4 ">
+        <div className="min-w-0">
+          {children}
+        </div>
+      </main>
+    </SidebarInset>
+  </SidebarProvider>
+);
 }

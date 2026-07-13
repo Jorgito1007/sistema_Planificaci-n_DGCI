@@ -115,12 +115,26 @@ if (!actorUserId) {
       const uploadDir = path.join(process.cwd(), "public", "uploads", "documents");
       await mkdir(uploadDir, { recursive: true });
 
-      const safeName = `${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
-      const filePath = path.join(uploadDir, safeName);
 
-      await writeFile(filePath, buffer);
-      pdfUrl = `/uploads/documents/${safeName}`;
+const baseName = path
+  .basename(file.name, ext)
+  .replace(/\s+/g, "_");
+
+const safeName = `${Date.now()}-${baseName}${ext}`;
+const filePath = path.join(uploadDir, safeName);
+
+await writeFile(filePath, buffer);
+
+pdfUrl = `/api/documents/file/${safeName}`;
+
+console.log("FILE NAME:", file.name);
+console.log("EXT:", ext);
+console.log("SAFE NAME:", safeName);
+console.log("PDF URL:", pdfUrl);
+console.log("FILE PATH:", filePath);
     }
+
+    
 
     const pool = await getPool();
 

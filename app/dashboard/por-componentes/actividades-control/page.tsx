@@ -522,9 +522,7 @@ async function cargarCargos() {
                 </th>
               </tr>
 
-              <tr className="bg-[#eef4fb] text-center">
-                <th className="border px-2 py-2"></th>
-              </tr>
+            
             </thead>
 
             <tbody>
@@ -550,7 +548,7 @@ async function cargarCargos() {
 
                       <td className="border px-2 py-2 align-top">
   {pregunta.cargo || "-"}
-</td>s
+</td>
 
                         <td className="border px-2 py-2 text-center align-top">{pregunta.existe}</td>
                         <td className="border px-2 py-2 text-center align-top">{pregunta.aprobado}</td>

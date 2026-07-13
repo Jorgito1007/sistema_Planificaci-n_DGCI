@@ -9,9 +9,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import Swal from "sweetalert2";
 
 type PreguntaDetalleForm = {
   id?: number;
+    Id?: number;
   numero: string;
   texto: string;
   cargo: string;
@@ -139,6 +141,10 @@ const [roleKey, setRoleKey] = useState("");
 const puedeAgregarItems =
   roleKey === "administrador" || roleKey === "subadministrador";
 
+    const puedeEditarPregunta =
+  roleKey === "administrador" ||
+  roleKey === "subadministrador";
+
   const cargarRegistros = async () => {
     try {
       const res = await fetch(
@@ -151,7 +157,13 @@ const puedeAgregarItems =
         return;
       }
 
-      setPreguntas(json.data?.preguntas || []);
+      setPreguntas(
+  (json.data?.preguntas || []).map((p: any) => ({
+    ...p,
+    id: Number(p.id ?? p.Id),
+  }))
+);
+
     } catch (error) {
       console.error(error);
       alert("Error al cargar los registros.");
@@ -194,6 +206,43 @@ async function cargarUsuarioActual() {
   }
 }
 
+async function validarYEditar() {
+
+    if (selectedIndex === null) return;
+
+    const pregunta = preguntas[selectedIndex];
+
+    const res = await fetch(
+        "/api/matriz-sistema-administrativo/validar-edicion",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                questionId: pregunta.id,
+            }),
+        }
+    );
+
+    const data = await res.json();
+
+    if (!data.puedeEditar) {
+
+        Swal.fire({
+            icon: "warning",
+            title: "Acceso denegado",
+            text: "Estimado usuario, no tiene permisos para editar este ítem de pregunta.",
+            confirmButtonColor: "#1d4ed8",
+        });
+
+        return;
+    }
+
+    editarSeleccionada();
+}
+
+
   useEffect(() => {
     cargarRegistros();
     cargarCargos();
@@ -201,11 +250,13 @@ async function cargarUsuarioActual() {
   }, []);
 
 const abrirNuevaPregunta = () => {
-  const siguiente = preguntas.length;
+  const siguiente = preguntasOrdenadas.length + 1;
+
   setPreguntaEditando(crearPreguntaDetalleVacia(siguiente));
   setEditIndex(null);
   setOpen(true);
 };
+
 
   const editarSeleccionada = () => {
     if (selectedIndex === null) {
@@ -218,29 +269,44 @@ const abrirNuevaPregunta = () => {
     setOpen(true);
   };
 
-  const solicitarEliminarSeleccionada = () => {
-    if (selectedIndex === null) {
-      alert("Seleccione una fila para eliminar.");
-      return;
+ async function eliminarSeleccionada() {
+  if (selectedIndex === null) return;
+
+  const pregunta = preguntasOrdenadas[selectedIndex];
+
+  console.log("Pregunta seleccionada para eliminar:", pregunta);
+
+  if (!pregunta?.id) {
+    alert("No se encontró el ID de la pregunta seleccionada.");
+    return;
+  }
+
+  const res = await fetch(
+    "/api/matriz-sistema-administrativo/eliminar-pregunta",
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        questionId: pregunta.id,
+      }),
     }
+  );
 
-    setOpenDeleteConfirm(true);
-  };
+  const data = await res.json();
 
-  const confirmarEliminarSeleccionada = async () => {
-    if (selectedIndex === null) return;
+  if (!res.ok) {
+    alert(data.error || "No se pudo eliminar la pregunta.");
+    return;
+  }
 
-    const actualizadas = preguntasOrdenadas
-      .filter((_, i) => i !== selectedIndex)
-      .map((p, i) => ({
-        ...p,
-        numero: `7.${i}.1`,
-      }));
+  setPreguntas((prev) =>
+    prev.filter((p) => Number(p.id) !== Number(pregunta.id))
+  );
 
-    await guardarTodo(actualizadas);
-    setSelectedIndex(null);
-    setOpenDeleteConfirm(false);
-  };
+  setSelectedIndex(null);
+}
 
   const actualizarCampo = (
     campo: keyof PreguntaDetalleForm,
@@ -266,18 +332,18 @@ const abrirNuevaPregunta = () => {
 
     let actualizadas: PreguntaDetalleForm[] = [];
 
-    if (editIndex === null) {
-      actualizadas = [...preguntas, preguntaEditando];
-    } else {
-      actualizadas = preguntasOrdenadas.map((p, i) =>
-        i === editIndex ? preguntaEditando : p
-      );
-    }
+ if (editIndex === null) {
+  actualizadas = [...preguntasOrdenadas, preguntaEditando];
+} else {
+  actualizadas = preguntasOrdenadas.map((p, i) =>
+    i === editIndex ? preguntaEditando : p
+  );
+}
 
-    actualizadas = actualizadas.map((p, i) => ({
-      ...recalcularPregunta(p),
-       numero: `7.${i}.1`,
-    }));
+actualizadas = actualizadas.map((p) => ({
+  ...recalcularPregunta(p),
+}));
+
 
     await guardarTodo(actualizadas);
     setOpen(false);
@@ -301,12 +367,19 @@ const abrirNuevaPregunta = () => {
 
       const json = await res.json();
 
-      if (!json.ok) {
-        alert(json.message || "No se pudo guardar.");
-        return;
-      }
+          if (!json.ok) {
+            Swal.fire({
+              icon: "warning",
+              title: "Validación",
+              text: json.message || "No se pudo guardar.",
+              confirmButtonColor: "#1d4ed8",
+            });
+            return;
+          }
+          
+          await cargarRegistros();
 
-      setPreguntas(preguntasActualizadas);
+
     } catch (error) {
       console.error(error);
       alert("Error al guardar.");
@@ -378,19 +451,20 @@ const abrirNuevaPregunta = () => {
   </Button>
 )}
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={editarSeleccionada}
-          disabled={selectedIndex === null}
-        >
-          Editar ítem seleccionado
-        </Button>
+    
+                   <Button
+    type="button"
+    variant="outline"
+    onClick={validarYEditar}
+    disabled={selectedIndex === null}
+>
+    Editar ítem seleccionado
+</Button>
 
         <Button
           type="button"
           variant="destructive"
-          onClick={solicitarEliminarSeleccionada}
+          onClick={eliminarSeleccionada}
           disabled={selectedIndex === null}
         >
           Eliminar ítem seleccionado
@@ -625,12 +699,13 @@ const abrirNuevaPregunta = () => {
                     <label className="mb-1 block text-sm font-medium">
                       Texto
                     </label>
-                    <textarea
-                      className="w-full rounded-md border px-3 py-2"
-                      rows={3}
-                      value={preguntaEditando.texto}
-                      onChange={(e) => actualizarCampo("texto", e.target.value)}
-                    />
+                 <textarea
+  className="w-full rounded-md border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-500"
+  rows={3}
+  value={preguntaEditando.texto}
+  disabled={!puedeEditarPregunta}
+  onChange={(e) => actualizarCampo("texto", e.target.value)}
+/>
                   </div>
                 </div>
 
@@ -798,34 +873,7 @@ const abrirNuevaPregunta = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={openDeleteConfirm} onOpenChange={setOpenDeleteConfirm}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar eliminación</DialogTitle>
-          </DialogHeader>
-
-          <div className="py-2 text-sm text-slate-700">
-            ¿Desea eliminar este ítem de la matriz de evaluación?
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpenDeleteConfirm(false)}
-            >
-              No
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={confirmarEliminarSeleccionada}
-            >
-              Sí
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+     
     </div>
   );
 }

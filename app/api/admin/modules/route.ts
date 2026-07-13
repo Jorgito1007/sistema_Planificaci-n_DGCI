@@ -14,16 +14,24 @@ export async function GET() {
       );
     }
 
-    const role = String(
-      currentUser.role || ""
-    ).toLowerCase();
+   const roleKey = String(
+  currentUser.roleKey || currentUser.role || ""
+)
+  .toLowerCase()
+  .trim()
+  .replace(/\s+/g, "");
 
-    if (role !== "administrador") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 403 }
-      );
-    }
+console.log("ADMIN MODULES ROLE:", roleKey);
+
+if (
+  roleKey !== "administrador" &&
+  roleKey !== "subadministrador"
+) {
+  return NextResponse.json(
+    { error: "No autorizado", roleKey },
+    { status: 403 }
+  );
+}
 
     const pool = await getPool();
 

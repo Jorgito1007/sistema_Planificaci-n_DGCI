@@ -216,6 +216,17 @@ export async function PUT(req: Request) {
       .input("UserId", sql.UniqueIdentifier, userId)
       .query(`DELETE FROM dbo.usuariosPreguntasPermisos WHERE UserId = @UserId`);
 
+await new sql.Request(tx)
+  .input("UserId", sql.UniqueIdentifier, userId)
+  .query(`
+    UPDATE dbo.Matriz_SistemaAdministrativoDetalle
+    SET ActorUserId = NULL,
+        FechaActualizacion = GETDATE()
+    WHERE ActorUserId = @UserId
+  `);
+
+
+
     if (Array.isArray(questions)) {
       for (const q of questions) {
         await new sql.Request(tx)
@@ -232,6 +243,16 @@ export async function PUT(req: Request) {
             VALUES
               (@UserId, @SubModuleId, @QuestionId, @CanView, @CanCreate, @CanEdit, @CanDelete)
           `);
+
+          await new sql.Request(tx)
+  .input("UserId", sql.UniqueIdentifier, userId)
+  .input("QuestionId", sql.Int, Number(q.questionId))
+  .query(`
+    UPDATE dbo.Matriz_SistemaAdministrativoDetalle
+    SET ActorUserId = @UserId,
+        FechaActualizacion = GETDATE()
+    WHERE Id = @QuestionId
+  `);
       }
     }
 

@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-
-import { Download } from "lucide-react";
-import { Send } from "lucide-react";
+import {
+  Download,
+  Send,
+  CalendarDays,
+  Building2,
+} from "lucide-react";
 
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -11,524 +14,305 @@ import Swal from "sweetalert2";
 import { HashLoader } from "react-spinners";
 
 export default function PlanAccionPage() {
-
   const pdfRef = useRef<HTMLDivElement>(null);
-
   const textAreaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
   const [periodoInicio, setPeriodoInicio] = useState("");
   const [periodoFin, setPeriodoFin] = useState("");
-
+  const [filas, setFilas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [planEnviado, setPlanEnviado] = useState(false);
 
   useEffect(() => {
-  obtenerPreguntas();
-}, []);
+    obtenerPreguntas();
+  }, []);
 
-const obtenerPreguntas = async () => {
-  try {
+  const obtenerPreguntas = async () => {
+    try {
+      const response = await fetch("/api/plan-accion-pc");
+      const data = await response.json();
 
-    const response = await fetch("/api/plan-accion-pc");
+      if (data.ok) {
+        const preguntasMapeadas = data.data.map((item: any) => ({
+          numeroPregunta: item.Numero || "",
+          descripcionPregunta: item.Texto || "",
+          clasificacion: item.Calificacion || "",
+          nivel: item.Nivel || "",
+          deficiencia: "",
+          actividades: "",
+          fechaInicio: "",
+          fechaFin: "",
+          responsable: item.FullName || "",
+          cargo: item.Cargo || "",
+          contacto: "",
+          recursos: "",
+          entregable: "",
+        }));
 
-    const data = await response.json();
-    console.log(data);
-
-    if (data.ok) {
-
-      const preguntasMapeadas = data.data.map((item: any) => ({
-        numeroPregunta: item.Numero || "",
-        descripcionPregunta: item.Texto || "",
-        clasificacion: item.Calificacion || "",
-        nivel: item.Nivel || "",
-        deficiencia: "",
-        actividades: "",
-        fechaInicio: "",
-        fechaFin: "",
-        responsable: "",
-        cargo: "",
-        contacto: "",
-        recursos: "",
-        entregable: "",
-      }));
-
-      setFilas(preguntasMapeadas);
+        setFilas(preguntasMapeadas);
+      }
+    } catch (error) {
+      console.error(error);
     }
+  };
 
-  } catch (error) {
-    console.error(error);
-  }
-};
+  const handleChange = (index: number, field: string, value: string) => {
+    const nuevasFilas = [...filas];
+    nuevasFilas[index][field] = value;
+    setFilas(nuevasFilas);
+  };
 
-  // SOLO UNA FILA
- const [filas, setFilas] = useState<any[]>([]);
+  const autoResize = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const target = e.currentTarget;
+    target.style.height = "auto";
+    target.style.height = `${target.scrollHeight}px`;
+  };
 
+  useEffect(() => {
+    textAreaRefs.current.forEach((textarea) => {
+      if (textarea) {
+        textarea.style.height = "auto";
+        textarea.style.height = textarea.scrollHeight + "px";
+      }
+    });
+  }, [filas]);
 
-const handleChange = (
-  index: number,
-  field: string,
-  value: string
-) => {
+  const enviarPlan = async () => {
+    try {
+      if (!periodoInicio || !periodoFin) {
+        Swal.fire({
+          icon: "warning",
+          title: "Campos incompletos",
+          text: "Favor completar el período.",
+          confirmButtonColor: "#0B3D91",
+        });
+        return;
+      }
 
-  const nuevasFilas = [...filas];
+      for (let i = 0; i < filas.length; i++) {
+        const fila = filas[i];
 
-  nuevasFilas[index][field] = value;
+        const campos = [
+          { key: "deficiencia", label: "Deficiencia" },
+          { key: "actividades", label: "Actividades" },
+          { key: "fechaInicio", label: "Fecha Inicio" },
+          { key: "fechaFin", label: "Fecha Fin" },
+          { key: "responsable", label: "Responsable" },
+          { key: "cargo", label: "Cargo" },
+          { key: "contacto", label: "Contacto" },
+          { key: "recursos", label: "Recursos" },
+          { key: "entregable", label: "Entregable" },
+        ];
 
-  setFilas(nuevasFilas);
-};
+        for (const campo of campos) {
+          if (!fila[campo.key] || fila[campo.key].toString().trim() === "") {
+            Swal.fire({
+              icon: "warning",
+              title: "Campos incompletos",
+              html: `
+                Favor completar el campo:
+                <br/><br/>
+                <strong>${campo.label}</strong>
+                <br/><br/>
+                en la pregunta:
+                <strong>${fila.numeroPregunta}</strong>
+              `,
+              confirmButtonColor: "#0B3D91",
+            });
+            return;
+          }
+        }
+      }
 
-const autoResize = (
-  e: React.FormEvent<HTMLTextAreaElement>
-) => {
+      setLoading(true);
 
-  const target = e.currentTarget;
-
-  target.style.height = "auto";
-  target.style.height = `${target.scrollHeight}px`;
-};
-
-useEffect(() => {
-
-  textAreaRefs.current.forEach((textarea) => {
-
-    if (textarea) {
-
-      textarea.style.height = "auto";
-
-      textarea.style.height =
-        textarea.scrollHeight + "px";
-    }
-
-  });
-
-}, [filas]);
-
-  // BOTÓN ENVIAR
-  const [loading, setLoading] = useState(false);
-
-  const [planEnviado, setPlanEnviado] = useState(false);
-  
-const enviarPlan = async () => {
-
-  try {
-
-    // ======================================
-// VALIDAR PERÍODOS
-// ======================================
-
-if (!periodoInicio || !periodoFin) {
-
-  Swal.fire({
-    icon: "warning",
-    title: "Campos incompletos",
-    text: "Favor completar el período.",
-    confirmButtonColor: "#2563eb",
-  });
-
-  return;
-}
-
-// ======================================
-// VALIDAR FILAS
-// ======================================
-
-for (let i = 0; i < filas.length; i++) {
-
-  const fila = filas[i];
-
-  const campos = [
-
-    {
-      key: "deficiencia",
-      label: "Deficiencia",
-    },
-
-    {
-      key: "actividades",
-      label: "Actividades",
-    },
-
-    {
-      key: "fechaInicio",
-      label: "Fecha Inicio",
-    },
-
-    {
-      key: "fechaFin",
-      label: "Fecha Fin",
-    },
-
-    {
-      key: "responsable",
-      label: "Responsable",
-    },
-
-    {
-      key: "cargo",
-      label: "Cargo",
-    },
-
-    {
-      key: "contacto",
-      label: "Contacto",
-    },
-
-    {
-      key: "recursos",
-      label: "Recursos",
-    },
-
-    {
-      key: "entregable",
-      label: "Entregable",
-    },
-
-  ];
-
-  for (const campo of campos) {
-
-    if (
-      !fila[campo.key] ||
-      fila[campo.key].toString().trim() === ""
-    ) {
-
-      Swal.fire({
-        icon: "warning",
-        title: "Campos incompletos",
-        html: `
-          Favor completar los datos de:
-
-          <br /><br />
-
-          <strong>
-            ${campo.label}
-          </strong>
-
-          <br /><br />
-
-          en la pregunta:
-
-          <strong>
-            ${fila.numeroPregunta}
-          </strong>
-        `,
-        confirmButtonColor: "#2563eb",
-      });
-
-      return;
-    }
-  }
-}
-
-    setLoading(true);
-
-    const response = await fetch(
-      "/api/plan-accion-pc/guardar",
-      {
+      const response = await fetch("/api/plan-accion-pc/guardar", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           periodoInicio,
           periodoFin,
           filas,
         }),
+      });
+
+      const data = await response.json();
+
+      if (data.ok) {
+        setPlanEnviado(true);
+
+        Swal.fire({
+          icon: "success",
+          title: "Éxito",
+          text: "Plan de acción enviado correctamente",
+          confirmButtonColor: "#0B3D91",
+        });
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: data.message,
+        });
       }
-    );
-
-    const data = await response.json();
-
-   if (data.ok) {
-
-  setPlanEnviado(true);
-
-  Swal.fire({
-    icon: "success",
-    title: "Éxito",
-    text:
-      "Plan de acción enviado correctamente",
-    confirmButtonColor: "#2563eb",
-  });
-
-    } else {
+    } catch (error) {
+      console.error(error);
 
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: data.message,
+        text: "Ocurrió un error al enviar.",
       });
-
+    } finally {
+      setLoading(false);
     }
+  };
 
-  } catch (error) {
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
 
-    console.error(error);
-
-    Swal.fire({
-      icon: "error",
-      title: "Error",
-      text:
-        "Ocurrió un error al enviar",
+    const worksheet = workbook.addWorksheet("Plan Acción", {
+      pageSetup: {
+        paperSize: 9,
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        margins: {
+          left: 0.2,
+          right: 0.2,
+          top: 0.3,
+          bottom: 0.3,
+          header: 0.1,
+          footer: 0.1,
+        },
+      },
     });
 
-  } finally {
+    worksheet.columns = [
+      { width: 15 },
+      { width: 40 },
+      { width: 12 },
+      { width: 15 },
+      { width: 30 },
+      { width: 30 },
+      { width: 15 },
+      { width: 15 },
+      { width: 20 },
+      { width: 20 },
+      { width: 20 },
+      { width: 20 },
+      { width: 20 },
+    ];
 
-    setLoading(false);
+    worksheet.mergeCells("A1:M2");
+    const titulo = worksheet.getCell("A1");
 
-  }
-
-};
-
-  // GENERAR PDF
-const exportarExcel = async () => {
-
-  const workbook = new ExcelJS.Workbook();
-
-  const worksheet = workbook.addWorksheet("Plan Acción", {
-    pageSetup: {
-      paperSize: 9, // A3
-      orientation: "landscape",
-      fitToPage: true,
-      fitToWidth: 1,
-      fitToHeight: 0,
-      margins: {
-  left: 0.2,
-  right: 0.2,
-  top: 0.3,
-  bottom: 0.3,
-  header: 0.1,
-  footer: 0.1,
-},
-    },
-  });
-
-  // ANCHOS COLUMNAS
-  worksheet.columns = [
-    { width: 15 },
-    { width: 40 },
-    { width: 12 },
-    { width: 15 },
-    { width: 30 },
-    { width: 30 },
-    { width: 15 },
-    { width: 15 },
-    { width: 20 },
-    { width: 20 },
-    { width: 20 },
-    { width: 20 },
-    { width: 20 },
-  ];
-
-  // ======================================
-// ENCABEZADO SUPERIOR
-// ======================================
-
-worksheet.mergeCells("A1:M1");
-
-const top = worksheet.getCell("A1");
-
-top.value = "CONTRALORÍA GENERAL DE LA REPÚBLICA";
-
-top.font = {
-  bold: true,
-  size: 12,
-};
-
-top.alignment = {
-  horizontal: "center",
-  vertical: "middle",
-};
-
-// ======================================
-// TITULO PRINCIPAL
-// ======================================
-
-worksheet.mergeCells("A3:M3");
-
-const titulo1 = worksheet.getCell("A3");
-
-titulo1.value =
-  "PLAN DE ACCIÓN PARA LA IMPLEMENTACIÓN DE LAS ACTIVIDADES DE MEJORA DEL SISTEMA POR COMPONENTES";
-
-titulo1.font = {
-  bold: true,
-  size: 11,
-};
-
-titulo1.alignment = {
-  horizontal: "center",
-  vertical: "middle",
-  wrapText: true,
-};
-
-titulo1.border = {
-  top: { style: "thin" },
-  left: { style: "thin" },
-  bottom: { style: "thin" },
-  right: { style: "thin" },
-};
-
-// ======================================
-// SUBTITULO
-// ======================================
-
-worksheet.mergeCells("A4:M5");
-
-const titulo2 = worksheet.getCell("A4");
-
-titulo2.value =
-  "GUÍA ESPECIALIZADA PARA LA IMPLEMENTACIÓN DEL CONTROL INTERNO EN LAS INSTITUCIONES GUBERNAMENTALES";
-
-titulo2.font = {
-  bold: true,
-  size: 10,
-};
-
-titulo2.alignment = {
-  horizontal: "center",
-  vertical: "middle",
-  wrapText: true,
-};
-
-titulo2.border = {
-  top: { style: "thin" },
-  left: { style: "thin" },
-  bottom: { style: "thin" },
-  right: { style: "thin" },
-};
-
-// ======================================
-// ENTIDAD
-// ======================================
-
-worksheet.getCell("A7").value = "ENTIDAD:";
-
-worksheet.getCell("A7").font = {
-  bold: true,
-};
-
-worksheet.mergeCells("B7:M7");
-
-worksheet.getCell("B7").value =
-  "Universidad Nacional Casimiro Sotelo Montenegro";
-
-// Bordes ENTIDAD
-for (let col = 1; col <= 13; col++) {
-
-  const cell = worksheet.getRow(7).getCell(col);
-
-  cell.border = {
-    top: { style: "thin" },
-    left: { style: "thin" },
-    bottom: { style: "thin" },
-    right: { style: "thin" },
-  };
-
-}
-
-// ======================================
-// PERIODO
-// ======================================
-
-worksheet.getCell("A8").value = "PERÍODO:";
-
-worksheet.getCell("A8").font = {
-  bold: true,
-};
-
-worksheet.mergeCells("B8:M8");
-
-worksheet.getCell("B8").value =
-  `Del: ${periodoInicio}    Al: ${periodoFin}`;
-
-// Bordes PERIODO
-for (let col = 1; col <= 13; col++) {
-
-  const cell = worksheet.getRow(8).getCell(col);
-
-  cell.border = {
-    top: { style: "thin" },
-    left: { style: "thin" },
-    bottom: { style: "thin" },
-    right: { style: "thin" },
-  };
-
-}
-
-// Espacio
-worksheet.addRow([]);
-
-  // CABECERA
-  const header = worksheet.addRow([
-    "Número Pregunta",
-    "Descripción",
-    "Clasificación",
-    "Nivel",
-    "Deficiencia",
-    "Actividades",
-    "Fecha Inicio",
-    "Fecha Fin",
-    "Nombre",
-    "Cargo",
-    "Contacto",
-    "Recursos",
-    "Entregable",
-  ]);
-
-  header.eachCell((cell) => {
-
-    cell.font = {
+    titulo.value = "PLAN DE ACCIÓN INSTITUCIONAL";
+    titulo.font = {
       bold: true,
+      size: 18,
+      color: { argb: "FFFFFFFF" },
     };
-
-    cell.fill = {
+    titulo.fill = {
       type: "pattern",
       pattern: "solid",
-      fgColor: {
-        argb: "D9D9D9",
-      },
+      fgColor: { argb: "FF0B3D91" },
     };
-
-    cell.alignment = {
+    titulo.alignment = {
       horizontal: "center",
       vertical: "middle",
-      wrapText: true,
     };
 
-    cell.border = {
-      top: { style: "thin" },
-      left: { style: "thin" },
-      bottom: { style: "thin" },
-      right: { style: "thin" },
+    worksheet.mergeCells("A3:M3");
+    const subtitulo = worksheet.getCell("A3");
+
+    subtitulo.value =
+      "Sistema de Control Interno por Componentes - Universidad Nacional Casimiro Sotelo Montenegro";
+
+    subtitulo.font = {
+      bold: true,
+      size: 11,
+      color: { argb: "FFC7A97A" },
     };
 
-  });
+    subtitulo.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF061B33" },
+    };
 
-  // FILAS
-  filas.forEach((fila) => {
+    subtitulo.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
 
-    const row = worksheet.addRow([
-      fila.numeroPregunta,
-      fila.descripcionPregunta,
-      fila.clasificacion,
-      fila.nivel,
-      fila.deficiencia,
-      fila.actividades,
-      fila.fechaInicio,
-      fila.fechaFin,
-      fila.responsable,
-      fila.cargo,
-      fila.contacto,
-      fila.recursos,
-      fila.entregable,
+    worksheet.getCell("A5").value = "ENTIDAD:";
+    worksheet.getCell("A5").font = { bold: true };
+
+    worksheet.mergeCells("B5:M5");
+    worksheet.getCell("B5").value =
+      "Universidad Nacional Casimiro Sotelo Montenegro";
+
+    worksheet.getCell("A6").value = "PERÍODO:";
+    worksheet.getCell("A6").font = { bold: true };
+
+    worksheet.mergeCells("B6:M6");
+    worksheet.getCell("B6").value = `Del: ${periodoInicio}    Al: ${periodoFin}`;
+
+    for (let rowNumber = 5; rowNumber <= 6; rowNumber++) {
+      for (let col = 1; col <= 13; col++) {
+        const cell = worksheet.getRow(rowNumber).getCell(col);
+
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+
+        cell.alignment = {
+          vertical: "middle",
+          wrapText: true,
+        };
+      }
+    }
+
+    worksheet.addRow([]);
+
+    const header = worksheet.addRow([
+      "Número Pregunta",
+      "Descripción",
+      "Clasificación",
+      "Nivel",
+      "Deficiencia",
+      "Actividades",
+      "Fecha Inicio",
+      "Fecha Fin",
+      "Nombre",
+      "Cargo",
+      "Contacto",
+      "Recursos",
+      "Entregable",
     ]);
 
-    row.eachCell((cell) => {
+    header.eachCell((cell) => {
+      cell.font = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+      };
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0B3D91" },
+      };
 
       cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
         wrapText: true,
-        vertical: "top",
       };
 
       cell.border = {
@@ -537,676 +321,417 @@ worksheet.addRow([]);
         bottom: { style: "thin" },
         right: { style: "thin" },
       };
-
     });
 
-    // COLOR NIVEL
-    const nivelCell = row.getCell(4);
+    filas.forEach((fila) => {
+      const row = worksheet.addRow([
+        fila.numeroPregunta,
+        fila.descripcionPregunta,
+        fila.clasificacion,
+        fila.nivel,
+        fila.deficiencia,
+        fila.actividades,
+        fila.fechaInicio,
+        fila.fechaFin,
+        fila.responsable,
+        fila.cargo,
+        fila.contacto,
+        fila.recursos,
+        fila.entregable,
+      ]);
 
-    if (
-      fila.nivel?.toLowerCase() === "medio"
-    ) {
+      row.eachCell((cell) => {
+        cell.alignment = {
+          wrapText: true,
+          vertical: "top",
+        };
 
-      nivelCell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: {
-          argb: "FFD966",
-        },
-      };
-    }
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
 
-  });
+      const nivelCell = row.getCell(4);
 
-// FILA VACÍA
-worksheet.addRow([]);
+      if (fila.nivel?.toLowerCase() === "bajo") {
+        nivelCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFF4D4F" },
+        };
+      }
 
-// NOTA FINAL
-worksheet.mergeCells(`A${worksheet.lastRow!.number + 1}:M${worksheet.lastRow!.number + 1}`);
+      if (fila.nivel?.toLowerCase() === "medio") {
+        nivelCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFD966" },
+        };
+      }
 
-const notaCell = worksheet.getCell(
-  `A${worksheet.lastRow!.number}`
-);
+      if (fila.nivel?.toLowerCase() === "alto") {
+        nivelCell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF22C55E" },
+        };
+      }
+    });
 
-notaCell.value =
-  "NOTA: Este anexo se imprimirá directamente desde la Matriz de Evaluación de Control Interno a los Sistemas por Componentes.";
+    worksheet.addRow([]);
 
-notaCell.font = {
-  size: 10,
-};
+    worksheet.mergeCells(
+      `A${worksheet.lastRow!.number + 1}:M${worksheet.lastRow!.number + 1}`
+    );
 
-notaCell.alignment = {
-  horizontal: "left",
-  vertical: "middle",
-  wrapText: true,
-};
+    const notaCell = worksheet.getCell(`A${worksheet.lastRow!.number}`);
 
-  // DESCARGAR
-  const buffer = await workbook.xlsx.writeBuffer();
+    notaCell.value =
+      "NOTA: Este documento forma parte del seguimiento institucional del Sistema de Control Interno por Componentes.";
 
-  saveAs(
-    new Blob([buffer]),
-    "plan_accion.xlsx"
-  );
-};
+    notaCell.font = {
+      size: 10,
+    };
 
+    notaCell.alignment = {
+      horizontal: "left",
+      vertical: "middle",
+      wrapText: true,
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    saveAs(new Blob([buffer]), "plan_accion_por_componentes.xlsx");
+  };
 
   return (
-<>
+    <>
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="rounded-2xl bg-white p-8 shadow-2xl">
+            <HashLoader
+              color="#0B3D91"
+              loading={loading}
+              size={50}
+              speedMultiplier={1}
+            />
 
-    {loading && (
-      <div
-        className="
-          fixed inset-0 z-50
-          flex items-center justify-center
-          bg-black/40 backdrop-blur-sm
-        "
-      >
-        <div className="bg-white p-8 rounded-2xl shadow-2xl">
-
-          <HashLoader
-            color="#084a89"
-            loading={loading}
-            size={50}
-            speedMultiplier={1}
-          />
-
-          <p className="mt-4 text-center font-semibold text-gray-700">
-            Enviando plan de acción...
-          </p>
-
-        </div>
-      </div>
-    )}
-
-    <div className="w-full min-h-screen p-6 ">
-
-      {/* BOTONES */}
-      <div className="flex gap-4 mb-4">
-
-        <button
-  onClick={enviarPlan}
-  disabled={loading}
-  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-full shadow-md shadow-blue-200 hover:bg-blue-700 hover:shadow-lg hover:-translate-y-0.5 transition-all active:scale-95"
->
-  <Send size={18} />
-  <span>Enviar Plan de Acción</span>
-   </button>
-
-   <button
-  onClick={exportarExcel}
-  disabled={!planEnviado}
-  className={`
-    inline-flex items-center justify-center gap-2 px-6 py-2.5
-    text-white font-semibold rounded-full transition-all
-
-    ${
-      planEnviado
-        ? "bg-gradient-to-r from-red-600 to-red-500 shadow-lg shadow-red-200 hover:shadow-red-300 hover:-translate-y-0.5 active:scale-95"
-        : "bg-gray-400 cursor-not-allowed opacity-60"
-    }
-  `}
-     >
-  <Download size={18} />
-  Descargar Informe
-   </button>
-
-      </div>
-
-      {/* CONTENIDO PDF */}
-    <div
-    id="area-pdf"
-  ref={pdfRef}
-  className="
-    min-w-[2200px]
-    bg-white
-    p-4
-    text-[11px]
-    text-black
-  "
-  style={{
-    fontFamily: "Arial, sans-serif",
-  }}
->
-
-        {/* ENCABEZADO */}
-        <div className="text-center font-bold text-[12px] mb-3">
-          CONTRALORÍA GENERAL DE LA REPÚBLICA
-        </div>
-
-        <div className="flex justify-end text-[12px] mb-1" style={{ fontWeight: 'bold' }}>
-          ANEXO No. 11-1
-        </div>
-
-        <div className="border border-black">
-          <div className="border-b border-black text-center font-bold py-1">
-            PLAN DE ACCIÓN PARA LA IMPLEMENTACIÓN DE LAS ACTIVIDADES DE
-            MEJORA DEL SISTEMA POR COMPONENTES
-          </div>
-
-          <div className="flex items-center">
-            <div className="flex-1 text-center font-bold text-[11px] px-2 py-3">
-              GUÍA ESPECIALIZADA PARA LA IMPLEMENTACIÓN DEL CONTROL INTERNO
-              <br />
-              EN LAS INSTITUCIONES GUBERNAMENTALES
-            </div>
+            <p className="mt-4 text-center font-semibold text-gray-700">
+              Enviando plan de acción...
+            </p>
           </div>
         </div>
+      )}
 
-        {/* DATOS */}
-        <div className="mt-3 border border-black">
+      <div className="min-h-screen w-full bg-slate-100 p-6">
+        <div className="mb-5 flex flex-wrap gap-4">
+          <button
+            onClick={enviarPlan}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#0B3D91] to-[#1565C0] px-6 py-2.5 font-semibold text-white shadow-md shadow-blue-200 transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-95"
+          >
+            <Send size={18} />
+            <span>Enviar Plan de Acción</span>
+          </button>
 
-          {/* ENTIDAD */}
-          <div className="border-b border-black flex">
-            <div className="w-[120px] border-r border-black px-2 py-2 font-bold">
-              ENTIDAD:
+          <button
+            onClick={exportarExcel}
+            disabled={!planEnviado}
+            className={`
+              inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5
+              font-semibold text-white transition-all
+              ${
+                planEnviado
+                  ? "bg-gradient-to-r from-[#C7A97A] to-[#B8860B] shadow-lg shadow-yellow-200 hover:-translate-y-0.5 hover:shadow-yellow-300 active:scale-95"
+                  : "cursor-not-allowed bg-gray-400 opacity-60"
+              }
+            `}
+          >
+            <Download size={18} />
+            Descargar Informe
+          </button>
+        </div>
+
+        <div
+          id="area-pdf"
+          ref={pdfRef}
+          className="min-w-[2200px] rounded-2xl bg-white p-5 text-[11px] text-black shadow-xl"
+          style={{
+            fontFamily: "Arial, sans-serif",
+          }}
+        >
+          <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+            <div className="flex items-center justify-between bg-gradient-to-r from-[#061B33] via-[#0B3D91] to-[#1565C0] px-8 py-5">
+              <div>
+                <h1 className="text-2xl font-extrabold uppercase tracking-wide text-white">
+                  Plan de Acción
+                </h1>
+
+                <p className="mt-1 text-sm font-medium text-blue-100">
+                  Guía Especializada para la Implementación del Control Interno por Componentes
+                </p>
+              </div>
             </div>
 
-            <div className="flex-1 px-2 py-2">
-              Universidad Nacional Casimiro Sotelo Montenegro
-            </div>
-          </div>
+            <div className="grid grid-cols-2 gap-6 bg-gradient-to-r from-slate-50 to-blue-50 px-8 py-5">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2 text-[#0B3D91]">
+                  <Building2 size={18} />
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    Entidad
+                  </p>
+                </div>
 
-          {/* PERÍODO */}
-          <div className="flex">
-            <div className="w-[120px] border-r border-black px-2 py-2 font-bold">
-              PERÍODO:
-            </div>
-
-            <div className="flex items-center gap-3 px-3 py-2">
-
-              <div className="flex items-center gap-2">
-                <span>Del:</span>
-
-                <input
-                  type="date"
-                  value={periodoInicio}
-                  onChange={(e) => setPeriodoInicio(e.target.value)}
-                         className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-                />
+                <p className="text-sm font-bold text-slate-800">
+                  Universidad Nacional Casimiro Sotelo Montenegro
+                </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span>Al:</span>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center gap-2 text-[#0B3D91]">
+                  <CalendarDays size={18} />
+                  <p className="text-xs font-bold uppercase tracking-widest">
+                    Período de Evaluación
+                  </p>
+                </div>
 
-                <input
-                  type="date"
-                  value={periodoFin}
-                  onChange={(e) => setPeriodoFin(e.target.value)}
-                         className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-                />
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-slate-600">Del:</span>
+
+                  <input
+                    type="date"
+                    value={periodoInicio}
+                    onChange={(e) => setPeriodoInicio(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0B3D91] focus:ring-2 focus:ring-blue-100"
+                  />
+
+                  <span className="font-semibold text-slate-600">Al:</span>
+
+                  <input
+                    type="date"
+                    value={periodoFin}
+                    onChange={(e) => setPeriodoFin(e.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0B3D91] focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
               </div>
-
             </div>
           </div>
+
+          <table
+            className="mt-4 w-full overflow-hidden rounded-xl border border-slate-300"
+            style={{
+              tableLayout: "fixed",
+              borderCollapse: "collapse",
+            }}
+          >
+            <thead>
+              <tr className="bg-[#0B3D91] text-center text-white">
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Número Pregunta
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Descripción de la Pregunta
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Clasificación
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Nivel
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Deficiencia
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Actividades
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Fecha Inicio
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Fecha Fin
+                </th>
+
+                <th
+                  colSpan={3}
+                  className="border border-slate-300 bg-[#061B33] p-2 text-[#C7A97A]"
+                >
+                  RESPONSABLE
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Recursos
+                </th>
+
+                <th rowSpan={2} className="border border-slate-300 p-2">
+                  Entregable
+                </th>
+              </tr>
+
+              <tr className="bg-[#EAF1FB] text-[#061B33]">
+                <th className="border border-slate-300 p-2">Nombre</th>
+                <th className="border border-slate-300 p-2">Cargo</th>
+                <th className="border border-slate-300 p-2">Contacto</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filas.map((fila, index) => (
+                <tr key={index} className="odd:bg-white even:bg-slate-50">
+                  <td className="border border-slate-300 text-center align-middle">
+                    <input
+                      type="text"
+                      value={fila.numeroPregunta}
+                      readOnly
+                      className="h-full w-full bg-transparent p-1 text-center font-bold outline-none"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300 p-1 align-top">
+                    <textarea
+                      ref={(el) => {
+                        textAreaRefs.current[index] = el;
+                      }}
+                      value={fila.descripcionPregunta}
+                      readOnly
+                      rows={1}
+                      className="h-full w-full resize-none overflow-hidden bg-transparent p-1 text-center outline-none"
+                      style={{ minHeight: "40px" }}
+                    />
+                  </td>
+
+                  <td className="border border-slate-300 text-center align-middle">
+                    <input
+                      type="text"
+                      value={fila.clasificacion}
+                      readOnly
+                      className="h-full w-full bg-transparent p-1 text-center font-bold outline-none"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300 p-1 text-center align-middle">
+                    <div
+                      className={`
+                        mx-auto flex min-h-[35px] w-[90%] items-center justify-center rounded-full font-bold
+                        ${
+                          fila.nivel?.toLowerCase() === "bajo"
+                            ? "bg-red-500 text-white"
+                            : fila.nivel?.toLowerCase() === "medio"
+                            ? "bg-yellow-300 text-black"
+                            : fila.nivel?.toLowerCase() === "alto"
+                            ? "bg-green-500 text-white"
+                            : "bg-slate-100 text-slate-700"
+                        }
+                      `}
+                    >
+                      {fila.nivel}
+                    </div>
+                  </td>
+
+                  {["deficiencia", "actividades"].map((field) => (
+                    <td
+                      key={field}
+                      className="border border-slate-300 align-top"
+                    >
+                      <textarea
+                        value={fila[field]}
+                        onChange={(e) =>
+                          handleChange(index, field, e.target.value)
+                        }
+                        onInput={autoResize}
+                        rows={1}
+                        className="h-full w-full resize-none overflow-hidden bg-transparent p-2 text-left outline-none focus:bg-blue-50"
+                      />
+                    </td>
+                  ))}
+
+                  <td className="border border-slate-300">
+                    <input
+                      type="date"
+                      value={fila.fechaInicio}
+                      onChange={(e) =>
+                        handleChange(index, "fechaInicio", e.target.value)
+                      }
+                      className="h-full w-full bg-transparent p-2 text-center outline-none focus:bg-blue-50"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300">
+                    <input
+                      type="date"
+                      value={fila.fechaFin}
+                      onChange={(e) =>
+                        handleChange(index, "fechaFin", e.target.value)
+                      }
+                      className="h-full w-full bg-transparent p-2 text-center outline-none focus:bg-blue-50"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300">
+                    <input
+                      type="text"
+                      value={fila.responsable}
+                      readOnly
+                      className="h-full w-full bg-blue-50 p-2 text-left font-semibold text-slate-700 outline-none"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300">
+                    <input
+                      type="text"
+                      value={fila.cargo}
+                      readOnly
+                      className="h-full w-full bg-blue-50 p-2 text-left font-semibold text-slate-700 outline-none"
+                    />
+                  </td>
+
+                  <td className="border border-slate-300">
+                    <input
+                      type="text"
+                      value={fila.contacto}
+                      onChange={(e) =>
+                        handleChange(index, "contacto", e.target.value)
+                      }
+                      className="h-full w-full bg-transparent p-2 text-left outline-none focus:bg-blue-50"
+                    />
+                  </td>
+
+                  {["recursos", "entregable"].map((field) => (
+                    <td
+                      key={field}
+                      className="border border-slate-300 align-top"
+                    >
+                      <textarea
+                        value={fila[field]}
+                        onChange={(e) =>
+                          handleChange(index, field, e.target.value)
+                        }
+                        onInput={autoResize}
+                        rows={1}
+                        className="h-full w-full resize-none overflow-hidden bg-transparent p-2 text-left outline-none focus:bg-blue-50"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-4 rounded-xl border-l-4 border-[#0B3D91] bg-blue-50 p-4 text-[13px] text-slate-700">
+            <strong>NOTA:</strong> Este documento forma parte del seguimiento institucional del Sistema de Control Interno por Componentes.
+          </div>
         </div>
-
-        {/* TABLA */}
-        <table className="w-full border-collapse border border-black mt-4" style={{
-    tableLayout: "fixed",
-  }}>
-
-          <thead>
-
-            <tr className="bg-gray-200 text-center"style={{
-  pageBreakInside: "avoid",
-}}>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Número Pregunta
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Descripción de la Pregunta
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Clasificación
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Nivel
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Deficiencia
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Actividades
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Fecha Inicio
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Fecha Fin
-              </th>
-
-              <th
-                colSpan={3}
-                className="border border-black p-2 bg-gray-300"
-              >
-                RESPONSABLE
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Recursos
-              </th>
-
-              <th rowSpan={2} className="border border-black p-2">
-                Entregable
-              </th>
-            </tr>
-
-            <tr className="w-full h-full p-1 outline-none bg-white">
-
-              <th className="border border-black p-2">
-                Nombre
-              </th>
-
-              <th className="border border-black p-2">
-                Cargo
-              </th>
-
-              <th className="border border-black p-2">
-                Contacto
-              </th>
-
-            </tr>
-
-          </thead>
-<tbody>
-
-  {filas.map((fila, index) => (
-
-  <tr key={index} >
-
-      <td className="border border-black text-center align-middle">
-        <input
-          type="text"
-          value={fila.numeroPregunta}
-          readOnly
-                 className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-          style={{ fontWeight: 'bold' }}
-        />
-      </td>
-
-      <td className="border border-black align-top p-1">
-       <textarea
-  ref={(el) => {
-    textAreaRefs.current[index] = el;
-  }}
-  value={fila.descripcionPregunta}
-  readOnly
-  rows={1}
-className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-  style={{
-  minHeight: "40px",
-}}
-/>
-      </td>
-
-      <td className="border border-black text-center align-middle">
-        <input
-          type="text"
-          value={fila.clasificacion}
-          readOnly
-          className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-          style={{ fontWeight: 'bold' }}
-        />
-      </td>
-
-    <td className="border border-black align-middle text-center p-1">
-
-  <div
-    className={`
-      mx-auto
-      flex
-      items-center
-      justify-center
-      w-[90%]
-      min-h-[35px]
-      font-bold
-      rounded
-
-      ${
-        fila.nivel?.toLowerCase() === "bajo"
-          ? "bg-red-500 text-white"
-          : fila.nivel?.toLowerCase() === "medio"
-          ? "bg-yellow-300 text-black"
-          : fila.nivel?.toLowerCase() === "alto"
-          ? "bg-green-500 text-white"
-          : ""
-      }
-    `}
-  >
-    {fila.nivel}
-  </div>
-
-</td>
-
-      
-
-      {/* DEFICIENCIA */}
-      <td className="border border-black text-center align-middle">
-      <textarea
-  value={fila.deficiencia}
-  onChange={(e) =>
-    handleChange(index, "deficiencia", e.target.value)
-  }
-  onInput={autoResize}
-  rows={1}
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-left
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-/>
-      </td>
-
-      {/* ACTIVIDADES */}
-      <td className="border border-black text-center align-middle">
-       <textarea
-  value={fila.actividades}
-  onChange={(e) =>
-    handleChange(index, "actividades", e.target.value)
-  }
-  onInput={autoResize}
-  rows={1}
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-left
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-/>
-      </td>
-
-      {/* FECHA INICIO */}
-      <td className="border border-black">
-        <input
-          type="date"
-          value={fila.fechaInicio}
-          onChange={(e) =>
-            handleChange(index, "fechaInicio", e.target.value)
-          }
-                 className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-        />
-      </td>
-
-      {/* FECHA FIN */}
-      <td className="border border-black">
-        <input
-          type="date"
-          value={fila.fechaFin}
-          onChange={(e) =>
-            handleChange(index, "fechaFin", e.target.value)
-          }
-                 className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-center
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-        />
-      </td>
-
-      {/* RESPONSABLE */}
-      <td className="border border-black">
-       <input
-  type="text"
-  value={fila.responsable}
-  onChange={(e) =>
-    handleChange(index, "responsable", e.target.value)
-  }
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    p-0
-    m-0
-    text-left
-  "
-/>
-      </td>
-
-      <td className="border border-black">
-       <input
-  type="text"
-  value={fila.cargo}
-  onChange={(e) =>
-    handleChange(index, "cargo", e.target.value)
-  }
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    p-0
-    m-0
-    text-left
-  "
-/>
-      </td>
-
-      <td className="border border-black">
-        <input
-  type="text"
-  value={fila.contacto}
-  onChange={(e) =>
-    handleChange(index, "contacto", e.target.value)
-  }
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    p-0
-    m-0
-    text-left
-  "
-/>
-      </td>
-
-      {/* RECURSOS */}
-      <td className="border border-black">
-              <textarea
-  value={fila.recursos}
-  onChange={(e) =>
-    handleChange(index, "recursos", e.target.value)
-  }
-  onInput={autoResize}
-  rows={1}
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-left
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-/>
-      </td>
-
-      {/* ENTREGABLE */}
-      <td className="border border-black">
-              <textarea
-  value={fila.entregable}
-  onChange={(e) =>
-    handleChange(index, "entregable", e.target.value)
-  }
-  onInput={autoResize}
-  rows={1}
-  className="
-    w-full
-    h-full
-    bg-transparent
-    border-none
-    outline-none
-    resize-none
-    overflow-hidden
-    p-0
-    m-0
-    text-left
-    align-top
-    whitespace-pre-wrap
-    break-words
-    leading-normal
-  "
-/>
-      </td>
-
-    </tr>
-
-  ))}
-
-</tbody>
-
-        </table>
-
-        {/* NOTA */}
-        <div className="mt-3 text-[15px]">
-          NOTA: Este anexo se imprimirá directamente desde la Matriz de
-          Evaluación de Control Interno a los Sistemas por Componentes.
-        </div>
-
       </div>
-    </div>
-     </>
+    </>
   );
 }

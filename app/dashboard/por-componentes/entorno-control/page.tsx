@@ -512,9 +512,7 @@ async function cargarCargos() {
     FECHA DE EMISIÓN / APROBACIÓN
   </th>
 </tr>
-              <tr className="bg-[#eef4fb] text-center">
-                <th className="border px-2 py-2"></th>
-              </tr>
+            
             </thead>
 
             <tbody>

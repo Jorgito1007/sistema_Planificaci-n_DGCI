@@ -254,6 +254,18 @@ if (Array.isArray(questions) && questions.length > 0) {
         (UserId, SubModuleId, QuestionId, CanView, CanCreate, CanEdit, CanDelete)
       VALUES ${valuesSql}
     `);
+
+    for (const q of validQuestions) {
+  await new sql.Request(tx)
+    .input("UserId", sql.UniqueIdentifier, userId)
+    .input("QuestionId", sql.Int, q.questionId)
+    .query(`
+      UPDATE dbo.Matriz_SistemaAdministrativoDetalle
+      SET ActorUserId = @UserId,
+          FechaActualizacion = GETDATE()
+      WHERE Id = @QuestionId
+    `);
+}
   }
 }
 

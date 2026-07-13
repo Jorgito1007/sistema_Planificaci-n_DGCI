@@ -121,6 +121,12 @@ export async function POST(req: Request) {
   sql.UniqueIdentifier,
   actorUserId
 )
+
+.input(
+  "Estado",
+  sql.Bit,
+  0
+)
         .query(`
           INSERT INTO PlanAccionSAdministrativo (
 
@@ -138,7 +144,8 @@ export async function POST(req: Request) {
             Contacto,
             Recursos,
             Entregable,
-            ActorUserId
+            ActorUserId,
+            Estado
 
           )
 
@@ -158,7 +165,8 @@ export async function POST(req: Request) {
             @Contacto,
             @Recursos,
             @Entregable,
-@actorUserId
+            @actorUserId,
+            @Estado
           )
         `);
 

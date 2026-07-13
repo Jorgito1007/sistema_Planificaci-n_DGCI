@@ -36,12 +36,15 @@ export async function GET(req: NextRequest) {
       .request()
       .input("ActorUserId", sql.UniqueIdentifier, actorUserId)
       .query(`
-        SELECT
+      SELECT
             Numero,
             Texto,
             Calificacion,
-            Nivel
-        FROM dbo.Matriz_SistemaAdministrativoDetalle
+            Nivel,
+			US.FullName,
+			SAD.Cargo
+        FROM dbo.Matriz_SistemaAdministrativoDetalle SAD
+		LEFT JOIN dbo.Usuarios_Dgci US ON SAD.ActorUserId=US.UserId
         WHERE ActorUserId = @ActorUserId
           AND Calificacion < 5
         ORDER BY Numero
