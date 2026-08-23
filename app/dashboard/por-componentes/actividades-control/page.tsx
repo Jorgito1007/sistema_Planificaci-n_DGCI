@@ -9,6 +9,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useNotifications } from "@/context/NotificationContext";
+
 
 type Principio = {
   id: number;
@@ -40,6 +42,8 @@ type PreguntaDetalleForm = {
   fechaEmision: string;
   interna: string;
   externa: string;
+  habilitarInterna: boolean;
+habilitarExterna: boolean;
 };
 
 type RegistroPrincipio = {
@@ -133,6 +137,8 @@ function crearPreguntaDetalleVacia(
     fechaEmision: "",
     interna: "",
     externa: "",
+    habilitarInterna: false,
+habilitarExterna: false,
   };
 }
 
@@ -174,6 +180,22 @@ const [principiosPermitidos, setPrincipiosPermitidos] = useState<number[]>([]);
   const [preguntasDetalle, setPreguntasDetalle] = useState<PreguntaDetalleForm[]>([]);
   const [registros, setRegistros] = useState<RegistroPrincipio[]>([]);
 
+ const [puedeEditarPregunta, setPuedeEditarPregunta] = useState(false);
+  const [preguntaEditando, setPreguntaEditando] =
+  useState<number | null>(null);
+
+  {/* estados de difusión */}
+  const [modalDifusion, setModalDifusion] = useState(false);
+
+const [preguntaDifusion, setPreguntaDifusion] =
+  useState<number | null>(null);
+
+const [difusionInterna, setDifusionInterna] = useState(false);
+
+const [difusionExterna, setDifusionExterna] = useState(false);
+
+const { cargarNotificaciones } = useNotifications();
+
 //permisos de usuario sobre la edicion de principios
 const cargarPermisosPrincipios = async () => {
   
@@ -189,6 +211,13 @@ console.log("PERMISOS PRINCIPIOS:", data);
   if (!res.ok || !data.ok) return;
 
   setIsFullAccess(data.isFullAccess);
+    const role = (data.role || "").toLowerCase();
+
+setPuedeEditarPregunta(
+  role === "administrador" ||
+  role === "subadministrador"
+);
+
 
   const ids = (data.principios || []).map((p: any) =>
     Number(p.PrincipioId)
@@ -368,6 +397,8 @@ async function cargarCargos() {
       console.error(error);
       alert("Error al guardar.");
     }
+
+    await cargarNotificaciones();
   };
 
   const registrosOrdenados = useMemo(() => {
@@ -620,154 +651,286 @@ async function cargarCargos() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="rounded-xl border p-4">
-              <h4 className="mb-4 text-base font-semibold">Pregunta general</h4>
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+  <div className="border-b bg-slate-100 px-5 py-3">
+    <h3 className="text-base font-semibold text-slate-700">
+      📋 Información de la pregunta
+    </h3>
+  </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Número</label>
-                  <input
-                    className="w-full rounded-md border px-3 py-2"
-                    value={preguntaGeneral.numero}
-                    onChange={(e) =>
-                      setPreguntaGeneral((prev) => ({
-                        ...prev,
-                        numero: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
+  <div className="p-5">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
+      <div>
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+          Número
+        </label>
 
-                <div className="md:col-span-3">
-                  <label className="mb-1 block text-sm font-medium">Texto</label>
-                  <textarea
-                    className="w-full rounded-md border px-3 py-2"
-                    rows={3}
-                    value={preguntaGeneral.texto}
-                    onChange={(e) =>
-                      setPreguntaGeneral((prev) => ({
-                        ...prev,
-                        texto: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
+        <input
+          className={`w-full rounded-lg border border-slate-300 px-3 py-2 ${
+            !puedeEditarPregunta
+              ? "bg-slate-100 text-slate-600 cursor-not-allowed"
+              : "focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          }`}
+          value={preguntaGeneral.numero}
+          readOnly={!puedeEditarPregunta}
+          onChange={(e) =>
+            setPreguntaGeneral((prev) => ({
+              ...prev,
+              numero: e.target.value,
+            }))
+          }
+        />
+      </div>
+<div className="lg:col-span-3">
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+          Texto de la pregunta
+        </label>
+
+        <textarea
+          rows={3}
+          className={`w-full rounded-lg border border-slate-300 px-3 py-2 ${
+            !puedeEditarPregunta
+              ? "bg-slate-100 text-slate-600 cursor-not-allowed"
+              : "focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          }`}
+          value={preguntaGeneral.texto}
+          readOnly={!puedeEditarPregunta}
+          onChange={(e) =>
+            setPreguntaGeneral((prev) => ({
+              ...prev,
+              texto: e.target.value,
+            }))
+          }
+        />
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+  {/* CABECERA SECCIÓN PRINCIPAL */}
+  <div className="border-b bg-slate-100 px-5 py-3 flex items-center justify-between">
+    <h4 className="text-base font-semibold text-slate-800">Preguntas adicionales</h4>
+    {puedeEditarPregunta && (
+      <Button
+        type="button"
+        onClick={agregarPregunta}
+      >
+        Agregar pregunta
+      </Button>
+    )}
+  </div>
+
+  {/* LISTADO DE PREGUNTAS */}
+  <div className="p-5 space-y-5">
+    {preguntasDetalle.map((pregunta, index) => (
+      <div
+        key={index}
+        className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs transition-all"
+      >
+        {/* CABECERA PREGUNTA */}
+        <div className="p-4 flex items-center justify-between bg-white border-b border-slate-200">
+          <div className="space-y-0.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 block">
+              Pregunta
+            </span>
+            <span className="text-xl font-bold text-slate-900 block">
+              {pregunta.numero}
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setPreguntaEditando(
+                  preguntaEditando === index ? null : index
+                )
+              }
+            >
+              {preguntaEditando === index
+                ? "Cerrar"
+                : puedeEditarPregunta
+                ? "Editar"
+                : "Ver"}
+            </Button>
+
+            {puedeEditarPregunta && preguntasDetalle.length > 1 && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => eliminarPregunta(index)}
+              >
+                Eliminar
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* CONTENIDO/FORMULARIO DE EDICIÓN */}
+        {preguntaEditando === index && (
+          <div className="p-5 space-y-6 bg-white">
+            {/* NUMERO Y TEXTO */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Número
+                </label>
+                <input
+                  className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                    !puedeEditarPregunta
+                      ? "bg-slate-100 text-slate-600 cursor-not-allowed"
+                      : ""
+                  }`}
+                  value={pregunta.numero}
+                  readOnly={!puedeEditarPregunta}
+                  onChange={(e) =>
+                    actualizarPreguntaDetalle(index, "numero", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Texto
+                </label>
+                <textarea
+                  className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                    !puedeEditarPregunta
+                      ? "bg-slate-100 text-slate-600 cursor-not-allowed"
+                      : ""
+                  }`}
+                  rows={2}
+                  value={pregunta.texto}
+                  readOnly={!puedeEditarPregunta}
+                  onChange={(e) =>
+                    actualizarPreguntaDetalle(index, "texto", e.target.value)
+                  }
+                />
               </div>
             </div>
 
-            <div className="rounded-xl border p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h4 className="text-base font-semibold">Preguntas adicionales</h4>
-                <Button type="button" onClick={agregarPregunta}>
-                  Agregar pregunta
-                </Button>
-              </div>
+            {/* CARGO RESPONSABLE */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                Cargo Responsable
+              </label>
+              <select
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                value={pregunta.cargo || ""}
+                onChange={(e) =>
+                  actualizarPreguntaDetalle(index, "cargo", e.target.value)
+                }
+              >
+                <option value="">Seleccione un cargo</option>
+                {cargos.map((cargo) => (
+                  <option key={cargo.Id} value={cargo.NombreCargo}>
+                    {cargo.NombreCargo}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div className="space-y-5">
-                {preguntasDetalle.map((pregunta, index) => (
-                  <div key={index} className="rounded-xl border bg-slate-50 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-sm font-semibold">
-                        Pregunta {index + 1}
-                      </span>
+            {/* GRILLA DE EVALUACIÓN BINARIA */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+              <CampoBinario
+                label="Existe"
+                value={pregunta.existe}
+                onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)}
+              />
 
-                      {preguntasDetalle.length > 1 && (
-                        <button
-                          type="button"
-                          className="text-sm font-medium text-red-600"
-                          onClick={() => eliminarPregunta(index)}
-                        >
-                          Eliminar
-                        </button>
-                      )}
-                    </div>
+              <CampoBinario
+                label="Aprobado"
+                value={pregunta.aprobado}
+                onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)}
+              />
 
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                      <div>
-                        <label className="mb-1 block text-sm font-medium">Número</label>
-                        <input
-                          className="w-full rounded-md border px-3 py-2"
-                          value={pregunta.numero}
-                          onChange={(e) =>
-                            actualizarPreguntaDetalle(index, "numero", e.target.value)
-                          }
-                        />
-                      </div>
+              <CampoBinario
+                label="Difundido"
+                value={pregunta.difundido}
+                onChange={(v) => {
+                  if (v === 1) {
+                    actualizarPreguntaDetalle(index, "difundido", 1);
+                    setPreguntaDifusion(index);
+                    setDifusionInterna(false);
+                    setDifusionExterna(false);
+                    setModalDifusion(true);
+                  } else {
+                    setPreguntasDetalle((prev) =>
+                      prev.map((p, i) => {
+                        if (i !== index) return p;
+                        return {
+                          ...p,
+                          difundido: 0,
+                          interna: "",
+                          externa: "",
+                          habilitarInterna: false,
+                          habilitarExterna: false,
+                        };
+                      })
+                    );
+                  }
+                }}
+              />
 
-                      <div className="md:col-span-3">
-                        <label className="mb-1 block text-sm font-medium">Texto</label>
-                        <textarea
-                          className="w-full rounded-md border px-3 py-2"
-                          rows={2}
-                          value={pregunta.texto}
-                          onChange={(e) =>
-                            actualizarPreguntaDetalle(index, "texto", e.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
+              <CampoLectura
+                label="Está presente"
+                value={pregunta.estaPresente}
+                tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
+              />
 
-                   
-{/* FILA 1 */}
-<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
- <div className="md:col-span-2">
-  <label className="mb-1 block text-sm font-medium">Cargo</label>
+              <CampoBinario
+                label="Implementado"
+                value={pregunta.implementado}
+                onChange={(v) =>
+                  actualizarPreguntaDetalle(index, "implementado", v)
+                }
+              />
 
-  <select
-    className="w-full rounded-md border px-3 py-2"
-    value={pregunta.cargo || ""}
-    onChange={(e) =>
-      actualizarPreguntaDetalle(index, "cargo", e.target.value)
-    }
-  >
-    <option value="">Seleccione un cargo</option>
+              <CampoBinario
+                label="Actualizado"
+                value={pregunta.actualizado}
+                onChange={(v) =>
+                  actualizarPreguntaDetalle(index, "actualizado", v)
+                }
+              />
+            </div>
 
-    {cargos.map((cargo) => (
-      <option key={cargo.Id} value={cargo.NombreCargo}>
-        {cargo.NombreCargo}
-      </option>
-    ))}
-  </select>
-</div>
+            {/* GRILLA DE RESULTADOS */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <CampoLectura
+                label="Está funcionando"
+                value={pregunta.estaFuncionando}
+                tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
+              />
 
-  <CampoBinario label="Existe" value={pregunta.existe} onChange={(v) => actualizarPreguntaDetalle(index, "existe", v)} />
-  <CampoBinario label="Aprobado" value={pregunta.aprobado} onChange={(v) => actualizarPreguntaDetalle(index, "aprobado", v)} />
-  <CampoBinario label="Difundido" value={pregunta.difundido} onChange={(v) => actualizarPreguntaDetalle(index, "difundido", v)} />
+              <CampoLectura
+                label="Calificación"
+                value={String(pregunta.calificacion)}
+              />
 
-  <CampoLectura
-    label="Está presente"
-    value={pregunta.estaPresente}
-    tipo={pregunta.estaPresente === "SI" ? "success" : "danger"}
-  />
+              <CampoLectura
+                label="Nivel"
+                value={pregunta.nivel}
+                tipo={
+                  pregunta.nivel === "Bajo"
+                    ? "danger"
+                    : pregunta.nivel === "Medio"
+                    ? "warning"
+                    : "success"
+                }
+              />
+            </div>
 
-  <CampoBinario label="Implementado" value={pregunta.implementado} onChange={(v) => actualizarPreguntaDetalle(index, "implementado", v)} />
-  <CampoBinario label="Actualizado" value={pregunta.actualizado} onChange={(v) => actualizarPreguntaDetalle(index, "actualizado", v)} />
-
-  <CampoLectura
-    label="Está funcionando"
-    value={pregunta.estaFuncionando}
-    tipo={pregunta.estaFuncionando === "SI" ? "success" : "danger"}
-  />
-
-  <CampoLectura label="Calificación" value={String(pregunta.calificacion)} />
-
-  <CampoLectura
-    label="Nivel"
-    value={pregunta.nivel}
-    tipo={
-      pregunta.nivel === "Bajo"
-        ? "danger"
-        : pregunta.nivel === "Medio"
-        ? "warning"
-        : "success"
-    }
-  />
-</div>
-
-{/* FILA 2 👉 AQUÍ LOS PONES JUNTOS */}
-<div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
-  <div className="md:col-span-2">
+          {/* SECCIÓN DOCUMENTACIÓN Y DIVULGACIÓN (2 FILAS x 2 COLUMNAS) */}
+<div className="grid grid-cols-1 gap-4 md:grid-cols-12 items-start">
+  
+  {/* FILA 1 - IZQUIERDA: Tipo de documento */}
+  <div className="md:col-span-4">
     <TipoDocumento
       label="Tipo de documento"
       value={pregunta.tipoDocumento}
@@ -777,52 +940,76 @@ async function cargarCargos() {
     />
   </div>
 
-  <div className="md:col-span-4">
-    <label className="mb-1 block text-sm font-medium">Descripción</label>
+  {/* FILA 1 - DERECHA: Descripción */}
+  <div className="md:col-span-8">
+    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-700">
+      Descripción
+    </label>
     <input
-      className="w-full rounded-md border px-3 py-2"
+      type="text"
+      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
       value={pregunta.descripcion}
       onChange={(e) =>
         actualizarPreguntaDetalle(index, "descripcion", e.target.value)
       }
     />
   </div>
+
+  {/* FILA 2 - IZQUIERDA: Fecha de emisión / aprobación */}
+  <div className="md:col-span-4">
+    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-700">
+      Fecha de emisión / aprobación
+    </label>
+    <input
+      type="date"
+      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700"
+      value={pregunta.fechaEmision}
+      onChange={(e) =>
+        actualizarPreguntaDetalle(index, "fechaEmision", e.target.value)
+      }
+    />
+  </div>
+
+  {/* FILA 2 - DERECHA: Divulgación (Interna / Externa) */}
+  <div className="md:col-span-8">
+    <label className="mb-1 block text-xs font-bold tracking-wide text-slate-800">
+      Divulgación
+    </label>
+    
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <label className="mb-1 block text-xs text-slate-600">Interna</label>
+        <CampoDifusion
+          label=""
+          value={pregunta.interna}
+          disabled={!pregunta.habilitarInterna}
+          onChange={(v) =>
+            actualizarPreguntaDetalle(index, "interna", v)
+          }
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs text-slate-600">Externa</label>
+        <CampoDifusion
+          label=""
+          value={pregunta.externa}
+          disabled={!pregunta.habilitarExterna}
+          onChange={(v) =>
+            actualizarPreguntaDetalle(index, "externa", v)
+          }
+        />
+      </div>
+    </div>
+  </div>
+  </div>
 </div>
-        
-
-                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <div>
-                        <label className="mb-1 block text-sm font-medium">
-                          Fecha de emisión / aprobación
-                        </label>
-                        <input
-                          type="date"
-                          className="w-full rounded-md border px-3 py-2"
-                          value={pregunta.fechaEmision}
-                          onChange={(e) =>
-                            actualizarPreguntaDetalle(index, "fechaEmision", e.target.value)
-                          }
-                        />
-                      </div>
-
-                      <CampoSiNo
-                        label="Interna"
-                        value={pregunta.interna}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "interna", v)}
-                      />
-
-                      <CampoSiNo
-                        label="Externa"
-                        value={pregunta.externa}
-                        onChange={(v) => actualizarPreguntaDetalle(index, "externa", v)}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
+        )}
+      </div>
+    ))}
+  </div>
+</div>
+           
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
@@ -833,6 +1020,98 @@ async function cargarCargos() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+  open={modalDifusion}
+  onOpenChange={setModalDifusion}
+>
+  <DialogContent className="max-w-md">
+
+    <DialogHeader>
+      <DialogTitle>
+        Medio de divulgación
+      </DialogTitle>
+    </DialogHeader>
+
+    <div className="space-y-4">
+
+      <label className="flex items-center gap-2">
+
+        <input
+          type="checkbox"
+          checked={difusionInterna}
+          onChange={(e) =>
+            setDifusionInterna(e.target.checked)
+          }
+        />
+
+        Difusión interna
+
+      </label>
+
+      <label className="flex items-center gap-2">
+
+        <input
+          type="checkbox"
+          checked={difusionExterna}
+          onChange={(e) =>
+            setDifusionExterna(e.target.checked)
+          }
+        />
+
+        Difusión externa
+
+      </label>
+
+    </div>
+
+    <DialogFooter>
+
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setModalDifusion(false)}
+      >
+        Cancelar
+      </Button>
+
+    <Button
+  type="button"
+  onClick={() => {
+
+    if (preguntaDifusion !== null) {
+
+      setPreguntasDetalle(prev =>
+        prev.map((p, i) => {
+
+          if (i !== preguntaDifusion) return p;
+
+          return {
+            ...p,
+
+            habilitarInterna: difusionInterna,
+            habilitarExterna: difusionExterna,
+
+            interna: difusionInterna ? p.interna : "",
+            externa: difusionExterna ? p.externa : "",
+          };
+
+        })
+      );
+
+    }
+
+    setModalDifusion(false);
+
+  }}
+>
+        Aceptar
+      </Button>
+
+    </DialogFooter>
+
+  </DialogContent>
+</Dialog>
     </div>
   );
 }
@@ -945,19 +1224,22 @@ function TipoDocumento({
 }
 
 
-function CampoSiNo({
+function CampoDifusion({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium">{label}</label>
       <select
+        disabled={disabled}
         className="w-full rounded-md border px-3 py-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}

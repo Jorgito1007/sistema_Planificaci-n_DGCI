@@ -20,20 +20,37 @@ export async function GET() {
       .request()
       .input("UserId", sql.UniqueIdentifier, currentUser.userId)
       .query(`
-        SELECT
-          (
-            SELECT COUNT(*)
-            FROM dbo.Matriz_SistemaAdministrativoDetalle
-            WHERE ActorUserId = @UserId
-              AND TRY_CONVERT(INT, Calificacion) BETWEEN 0 AND 4
-          ) AS PendientesSA,
+       SELECT
+(
+    SELECT COUNT(*)
+    FROM dbo.Matriz_SistemaAdministrativoDetalle M
+    WHERE M.ActorUserId = @UserId
+      AND TRY_CONVERT(INT, M.Calificacion) BETWEEN 1 AND 4
 
-          (
-            SELECT COUNT(*)
-            FROM dbo.EvaluacionesPrincipioDetalleDGCI
-            WHERE ActorUserId = @UserId
-              AND TRY_CONVERT(INT, Calificacion) BETWEEN 0 AND 4
-          ) AS PendientesPC
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.PlanAccionSAdministrativo P
+          WHERE P.ActorUserId = M.ActorUserId
+            AND P.NumeroPregunta = M.Numero
+      )
+
+) AS PendientesSA,
+
+(
+    SELECT COUNT(*)
+    FROM dbo.EvaluacionesPrincipioDetalleDGCI E
+    WHERE E.ActorUserId = @UserId
+      AND TRY_CONVERT(INT, E.Calificacion) BETWEEN 1 AND 4
+
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dbo.PlanAccionSPorComponentes P
+          WHERE P.ActorUserId = E.ActorUserId
+            AND P.NumeroPregunta = E.Numero
+      )
+
+) AS PendientesPC
+
       `);
 
     const row = result.recordset[0];

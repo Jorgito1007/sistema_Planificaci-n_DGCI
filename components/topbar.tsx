@@ -4,7 +4,8 @@ import Image from "next/image";
 import { Bell, LogOut, UserCircle } from "lucide-react";
 import { logout } from "@/app/auth/actions";
 import Swal from "sweetalert2";
-import { useRef, useState, useEffect  } from "react";
+import { useRef, useState, useEffect } from "react";
+import { useNotifications } from "@/context/NotificationContext";
 import Link from "next/link";
 
 
@@ -20,27 +21,16 @@ type TopbarProps = {
 export function Topbar({ user }: TopbarProps) {
 
 const [openNotif, setOpenNotif] = useState(false);
-const [notificaciones, setNotificaciones] = useState<any[]>([]);
+
+const {
+  notificaciones,
+  cargarNotificaciones,
+} = useNotifications();
 
 useEffect(() => {
-  async function cargarNotificaciones() {
-    try {
-      const res = await fetch("/api/notificaciones/plan-accion", {
-        cache: "no-store",
-      });
-
-      const data = await res.json();
-
-      if (data.ok) {
-        setNotificaciones(data.notificaciones || []);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
   cargarNotificaciones();
-}, []);
+}, [cargarNotificaciones]);
+
   
       const logoutFormRef = useRef<HTMLFormElement>(null);
     const handleLogout = async () => {

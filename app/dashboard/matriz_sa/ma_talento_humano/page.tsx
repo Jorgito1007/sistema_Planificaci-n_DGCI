@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import Swal  from "sweetalert2";
-
+import { PlusCircle, Pencil, Trash2 } from "lucide-react";
+import { useNotifications } from "@/context/NotificationContext";
 
 type PreguntaDetalleForm = {
   id?: number;
@@ -133,6 +134,11 @@ export default function MatrizRecursosHumanosPage() {
   const [cargos, setCargos] = useState<Cargo[]>([]);
   const [roleKey, setRoleKey] = useState("");
 
+const puedeEditarTextoPregunta =
+  roleKey === "Administrador" ||
+  roleKey === "SubAdministrador";
+
+
   const [open, setOpen] = useState(false);
  
   const [preguntas, setPreguntas] = useState<PreguntaDetalleForm[]>([]);
@@ -141,13 +147,24 @@ export default function MatrizRecursosHumanosPage() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-const puedeAgregarItems =
-  roleKey === "administrador" || roleKey === "subadministrador";
+  const [openDifusion, setOpenDifusion] = useState(false);
 
-  
-  const puedeEditarPregunta =
-  roleKey === "administrador" ||
-  roleKey === "subadministrador";
+const [habilitarInterna, setHabilitarInterna] = useState(false);
+const [habilitarExterna, setHabilitarExterna] = useState(false);
+
+const [permisosItems, setPermisosItems] = useState({
+  puedeAgregar: false,
+  puedeEditar: false,
+  puedeEliminar: false,
+});
+
+const [cargandoPermisos, setCargandoPermisos] = useState(true);
+
+const puedeAgregarItems = permisosItems.puedeAgregar;
+const puedeEditarPregunta = permisosItems.puedeEditar;
+const puedeEliminarPregunta = permisosItems.puedeEliminar;
+
+const { cargarNotificaciones } = useNotifications();
 
   const cargarRegistros = async () => {
     try {
@@ -210,41 +227,171 @@ async function cargarUsuarioActual() {
   }
 }
 
-async function validarYEditar() {
+//Validar y eliminar preguntas de la matrix del sistema administrativo
+async function validarYEliminar() {
+  if (selectedIndex === null) {
+    return;
+  }
 
-    if (selectedIndex === null) return;
+  const pregunta = preguntas[selectedIndex];
 
-    const pregunta = preguntas[selectedIndex];
+  if (!pregunta?.id) {
+    Swal.fire({
+      icon: "warning",
+      title: "Ítem no válido",
+      text: "No se encontró el identificador del ítem seleccionado.",
+      confirmButtonColor: "#1d4ed8",
+    });
 
+    return;
+  }
+
+  try {
     const res = await fetch(
-        "/api/matriz-sistema-administrativo/validar-edicion",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                questionId: pregunta.id,
-            }),
-        }
+      "/api/matriz-sistema-administrativo/validar-eliminacion",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionId: pregunta.id,
+        }),
+      }
     );
 
     const data = await res.json();
 
-    if (!data.puedeEditar) {
+    if (!res.ok || !data.puedeEliminar) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Acceso denegado",
+        text:
+          data.message ||
+          "No tiene permisos para eliminar este ítem.",
+        confirmButtonColor: "#1d4ed8",
+      });
 
-        Swal.fire({
-            icon: "warning",
-            title: "Acceso denegado",
-            text: "Estimado usuario, no tiene permisos para editar este ítem de pregunta.",
-            confirmButtonColor: "#1d4ed8",
-        });
+      return;
+    }
 
-        return;
+    await eliminarSeleccionada();
+  } catch (error) {
+    console.error("Error validando eliminación:", error);
+
+    await Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: "No fue posible validar el permiso de eliminación.",
+      confirmButtonColor: "#dc2626",
+    });
+  }
+}
+
+
+//Validar y editar preguntas de la matrix del sistema administrativo
+async function validarYEditar() {
+  if (selectedIndex === null) {
+    return;
+  }
+
+  const pregunta = preguntas[selectedIndex];
+
+  if (!pregunta?.id) {
+    await Swal.fire({
+      icon: "warning",
+      title: "Ítem no válido",
+      text: "No se encontró el identificador del ítem seleccionado.",
+      confirmButtonColor: "#1d4ed8",
+    });
+
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      "/api/matriz-sistema-administrativo/validar-edicion",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionId: pregunta.id,
+        }),
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || !data.puedeEditar) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Acceso denegado",
+        text:
+          data.message ||
+          "No tiene permisos para editar este ítem.",
+        confirmButtonColor: "#1d4ed8",
+      });
+
+      return;
     }
 
     editarSeleccionada();
+  } catch (error) {
+    console.error("Error validando edición:", error);
+
+    await Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: "No fue posible validar el permiso de edición.",
+      confirmButtonColor: "#dc2626",
+    });
+  }
 }
+
+useEffect(() => {
+  async function cargarPermisosItems() {
+    try {
+      setCargandoPermisos(true);
+
+      const res = await fetch(
+        "/api/matriz-sistema-administrativo/permisos",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(
+          data.message || "No se pudieron cargar los permisos."
+        );
+      }
+
+      setPermisosItems({
+        puedeAgregar: Boolean(data.permisos?.puedeAgregar),
+        puedeEditar: Boolean(data.permisos?.puedeEditar),
+        puedeEliminar: Boolean(data.permisos?.puedeEliminar),
+      });
+    } catch (error) {
+      console.error(error);
+
+      setPermisosItems({
+        puedeAgregar: false,
+        puedeEditar: false,
+        puedeEliminar: false,
+      });
+    } finally {
+      setCargandoPermisos(false);
+    }
+  }
+
+  cargarPermisosItems();
+}, []);
+
 
   useEffect(() => {
     cargarRegistros();
@@ -252,10 +399,25 @@ async function validarYEditar() {
     cargarUsuarioActual();
   }, []);
 
-const abrirNuevaPregunta = () => {
-  const siguiente = preguntasOrdenadas.length + 1;
+  
 
-  setPreguntaEditando(crearPreguntaDetalleVacia(siguiente));
+const abrirNuevaPregunta = () => {
+  const ultimoCorrelativo = preguntas.reduce((mayor, pregunta) => {
+    const partes = String(pregunta.numero)
+      .split(".")
+      .map(Number);
+
+    const correlativo = partes[1] || 0;
+
+    return Math.max(mayor, correlativo);
+  }, 0);
+
+  const siguiente = ultimoCorrelativo + 1;
+
+  setPreguntaEditando(
+    crearPreguntaDetalleVacia(siguiente)
+  );
+
   setEditIndex(null);
   setOpen(true);
 };
@@ -386,15 +548,40 @@ actualizadas = actualizadas.map((p) => ({
       console.error(error);
       alert("Error al guardar.");
     }
+
+    await cargarNotificaciones();
   };
 
-  const preguntasOrdenadas = useMemo(() => {
-    return [...preguntas].sort((a, b) => {
-      const na = a.numero.split(".").map(Number);
-      const nb = b.numero.split(".").map(Number);
-      return (na[2] || 0) - (nb[2] || 0);
-    });
-  }, [preguntas]);
+const preguntasOrdenadas = useMemo(() => {
+  return [...preguntas].sort((a, b) => {
+    const partesA = String(a.numero)
+      .split(".")
+      .map(Number);
+
+    const partesB = String(b.numero)
+      .split(".")
+      .map(Number);
+
+    const principalA = partesA[0] || 0;
+    const principalB = partesB[0] || 0;
+
+    if (principalA !== principalB) {
+      return principalA - principalB;
+    }
+
+    const secundarioA = partesA[1] || 0;
+    const secundarioB = partesB[1] || 0;
+
+    if (secundarioA !== secundarioB) {
+      return secundarioA - secundarioB;
+    }
+
+    const detalleA = partesA[2] || 0;
+    const detalleB = partesB[2] || 0;
+
+    return detalleA - detalleB;
+  });
+}, [preguntas]);
 
   function badgeSiNo(valor: string) {
     const esSi = String(valor).toUpperCase() === "SI";
@@ -448,33 +635,50 @@ actualizadas = actualizadas.map((p) => ({
         </div>
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-3">
+  {puedeAgregarItems && (
+    <Button
+      type="button"
+      onClick={abrirNuevaPregunta}
+      disabled={cargandoPermisos}
+      className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:from-blue-700 hover:to-cyan-600"
+    >
+      <PlusCircle className="mr-2 h-5 w-5" />
+      Agregar ítem
+    </Button>
+  )}
 
-      {puedeAgregarItems && (
-  <Button type="button" onClick={abrirNuevaPregunta}>
-    Agregar items
-  </Button>
-)}
+  {puedeEditarPregunta && (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={validarYEditar}
+      disabled={
+        cargandoPermisos ||
+        selectedIndex === null
+      }
+      className="rounded-xl border-amber-500 text-amber-700 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-amber-50"
+    >
+      <Pencil className="mr-2 h-5 w-5" />
+      Editar ítem
+    </Button>
+  )}
 
-             <Button
-    type="button"
-    variant="outline"
-    onClick={validarYEditar}
-    disabled={selectedIndex === null}
->
-    Editar ítem seleccionado
-</Button>
-
-
-        <Button
-          type="button"
-          variant="destructive"
-          onClick={eliminarSeleccionada}
-          disabled={selectedIndex === null}
-        >
-          Eliminar ítem seleccionado
-        </Button>
-      </div>
+  {puedeEliminarPregunta && (
+    <Button
+      type="button"
+      onClick={validarYEliminar}
+      disabled={
+        cargandoPermisos ||
+        selectedIndex === null
+      }
+      className="rounded-xl bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:from-red-700 hover:to-rose-600"
+    >
+      <Trash2 className="mr-2 h-5 w-5" />
+      Eliminar ítem
+    </Button>
+  )}
+</div>
 
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-100 px-4 py-3">
@@ -686,184 +890,304 @@ actualizadas = actualizadas.map((p) => ({
             </DialogTitle>
           </DialogHeader>
 
+     
           {preguntaEditando && (
-            <div className="space-y-6">
-              <div className="rounded-xl border p-4 bg-slate-50">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Número
-                    </label>
-                    <input
-                      className="w-full rounded-md border px-3 py-2 bg-slate-100"
-                      value={preguntaEditando.numero}
-                      readOnly
-                    />
-                  </div>
+  <div className="space-y-6">
 
-                  <div className="md:col-span-3">
-                    <label className="mb-1 block text-sm font-medium">
-                      Texto
-                    </label>
-                                   <textarea
-  className="w-full rounded-md border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-500"
+    {/* ================= DATOS DE LA PREGUNTA ================= */}
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b bg-slate-100 px-5 py-3">
+        <h3 className="text-base font-semibold text-slate-700">
+          📋 Información de la pregunta
+        </h3>
+      </div>
+
+      <div className="p-5">
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Número
+            </label>
+
+            <input
+              className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2"
+              value={preguntaEditando.numero}
+              readOnly
+            />
+          </div>
+
+          <div className="lg:col-span-3">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Texto de la pregunta
+            </label>
+       <textarea
   rows={3}
   value={preguntaEditando.texto}
-  disabled={!puedeEditarPregunta}
-  onChange={(e) => actualizarCampo("texto", e.target.value)}
+  disabled={!puedeEditarTextoPregunta}
+  onChange={(e) =>
+    actualizarCampo("texto", e.target.value)
+  }
+  className="w-full rounded-lg border border-slate-300 px-3 py-2
+    focus:border-blue-500
+    focus:ring-2
+    focus:ring-blue-200
+    disabled:bg-slate-100
+    disabled:text-slate-600
+    disabled:cursor-not-allowed"
 />
-                  </div>
-                </div>
+          </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-8">
-         
-         <div className="col-span-2">
-  <label className="mb-1 block text-sm font-medium">
-    Cargo
-  </label>
+        </div>
 
-  <select
-    className="w-full rounded-md border px-3 py-2"
-    value={preguntaEditando.cargo || ""}
-    onChange={(e) =>
-      actualizarCampo("cargo", e.target.value)
+      </div>
+    </div>
+
+    {/* ================= EVALUACIÓN ================= */}
+
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+
+      <div className="border-b bg-slate-100 px-5 py-3">
+     
+      </div>
+
+      <div className="p-5 space-y-6">
+
+        <div>
+
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Cargo Responsable
+          </label>
+
+          <select
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            value={preguntaEditando.cargo || ""}
+            onChange={(e) =>
+              actualizarCampo("cargo", e.target.value)
+            }
+          >
+            <option value="">
+              Seleccione un cargo
+            </option>
+
+            {cargos.map((cargo) => (
+              <option
+                key={cargo.Id}
+                value={cargo.NombreCargo}
+              >
+                {cargo.NombreCargo}
+              </option>
+            ))}
+          </select>
+
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+
+          <CampoBinario
+            label="Existe"
+            value={preguntaEditando.existe}
+            onChange={(v) => actualizarCampo("existe", v)}
+          />
+
+          <CampoBinario
+            label="Aprobado"
+            value={preguntaEditando.aprobado}
+            onChange={(v) => actualizarCampo("aprobado", v)}
+          />
+
+          <CampoBinario
+  label="Difundido"
+  value={preguntaEditando.difundido}
+  onChange={(v) => {
+
+    const valorAnterior = preguntaEditando.difundido;
+
+    // Actualizar Difundido
+    actualizarCampo("difundido", v);
+
+    // SOLO cuando cambia de 0 → 1
+    if (valorAnterior === 0 && v === 1) {
+      setOpenDifusion(true);
     }
-  >
-    <option value="">
-      Seleccione un cargo
-    </option>
 
-    {cargos.map((cargo) => (
-      <option
-        key={cargo.Id}
-        value={cargo.NombreCargo}
-      >
-        {cargo.NombreCargo}
-      </option>
-    ))}
-  </select>
-</div>
+  }}
+/>
 
+          <CampoLectura
+            label="Está presente"
+            value={preguntaEditando.estaPresente}
+            tipo={
+              preguntaEditando.estaPresente === "SI"
+                ? "success"
+                : "danger"
+            }
+          />
 
-                  <CampoBinario
-                    label="Existe"
-                    value={preguntaEditando.existe}
-                    onChange={(v) => actualizarCampo("existe", v)}
-                  />
-                  <CampoBinario
-                    label="Aprobado"
-                    value={preguntaEditando.aprobado}
-                    onChange={(v) => actualizarCampo("aprobado", v)}
-                  />
-                  <CampoBinario
-                    label="Difundido"
-                    value={preguntaEditando.difundido}
-                    onChange={(v) => actualizarCampo("difundido", v)}
-                  />
+          <CampoBinario
+            label="Implementado"
+            value={preguntaEditando.implementado}
+            onChange={(v) =>
+              actualizarCampo("implementado", v)
+            }
+          />
 
-                  <CampoLectura
-                    label="Está presente"
-                    value={preguntaEditando.estaPresente}
-                    tipo={
-                      preguntaEditando.estaPresente === "SI"
-                        ? "success"
-                        : "danger"
-                    }
-                  />
+        <CampoBinario
+  label="Difundido"
+  value={preguntaEditando.difundido}
+  onChange={(v) => {
+    actualizarCampo("difundido", v);
 
-                  <CampoBinario
-                    label="Implementado"
-                    value={preguntaEditando.implementado}
-                    onChange={(v) => actualizarCampo("implementado", v)}
-                  />
-                  <CampoBinario
-                    label="Actualizado"
-                    value={preguntaEditando.actualizado}
-                    onChange={(v) => actualizarCampo("actualizado", v)}
-                  />
+    if (preguntaEditando.difundido === 0 && v === 1) {
+      setOpenDifusion(true);
+    }
+  }}
+/>
 
-                  <CampoLectura
-                    label="Está funcionando"
-                    value={preguntaEditando.estaFuncionando}
-                    tipo={
-                      preguntaEditando.estaFuncionando === "SI"
-                        ? "success"
-                        : "danger"
-                    }
-                  />
+        </div>
 
-                  <CampoLectura
-                    label="Calificación"
-                    value={String(preguntaEditando.calificacion)}
-                  />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
-                  <CampoLectura
-                    label="Nivel"
-                    value={preguntaEditando.nivel}
-                    tipo={
-                      preguntaEditando.nivel === "Bajo"
-                        ? "danger"
-                        : preguntaEditando.nivel === "Medio"
-                        ? "warning"
-                        : "success"
-                    }
-                  />
-                </div>
+          <CampoLectura
+            label="Está funcionando"
+            value={preguntaEditando.estaFuncionando}
+            tipo={
+              preguntaEditando.estaFuncionando === "SI"
+                ? "success"
+                : "danger"
+            }
+          />
 
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-6">
-                  <div className="md:col-span-2">
-                    <TipoDocumento
-                      label="Tipo de documento"
-                      value={preguntaEditando.tipoDocumento}
-                      onChange={(v) => actualizarCampo("tipoDocumento", v)}
-                    />
-                  </div>
+          <CampoLectura
+            label="Calificación"
+            value={String(
+              preguntaEditando.calificacion
+            )}
+          />
 
-                  <div className="md:col-span-4">
-                    <label className="mb-1 block text-sm font-medium">
-                      Descripción
-                    </label>
-                    <input
-                      className="w-full rounded-md border px-3 py-2"
-                      value={preguntaEditando.descripcion}
-                      onChange={(e) =>
-                        actualizarCampo("descripcion", e.target.value)
-                      }
-                    />
-                  </div>
-                </div>
+          <CampoLectura
+            label="Nivel"
+            value={preguntaEditando.nivel}
+            tipo={
+              preguntaEditando.nivel === "Bajo"
+                ? "danger"
+                : preguntaEditando.nivel === "Medio"
+                ? "warning"
+                : "success"
+            }
+          />
 
-                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">
-                      Fecha de emisión / aprobación
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full rounded-md border px-3 py-2"
-                      value={preguntaEditando.fechaEmision}
-                      onChange={(e) =>
-                        actualizarCampo("fechaEmision", e.target.value)
-                      }
-                    />
-                  </div>
+        </div>
 
-                  <CampoSiNo
-                    label="Interna"
-                    value={preguntaEditando.interna}
-                    onChange={(v) => actualizarCampo("interna", v)}
-                  />
+      </div>
+    </div>
 
-                  <CampoSiNo
-                    label="Externa"
-                    value={preguntaEditando.externa}
-                    onChange={(v) => actualizarCampo("externa", v)}
-                  />
-                </div>
-              </div>
+    {/* ================= DOCUMENTACIÓN ================= */}
+
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+
+      <div className="border-b bg-slate-100 px-5 py-3">
+      
+      </div>
+
+      <div className="p-5 space-y-5">
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-6">
+
+          <div className="lg:col-span-2">
+
+            <TipoDocumento
+              label="Tipo de documento"
+              value={preguntaEditando.tipoDocumento}
+              onChange={(v) =>
+                actualizarCampo("tipoDocumento", v)
+              }
+            />
+
+          </div>
+
+          <div className="lg:col-span-4">
+
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Descripción
+            </label>
+
+            <input
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              value={preguntaEditando.descripcion}
+              onChange={(e) =>
+                actualizarCampo(
+                  "descripcion",
+                  e.target.value
+                )
+              }
+            />
+
+          </div>
+
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
+          <div>
+
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Fecha de emisión / aprobación
+            </label>
+
+            <input
+              type="date"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              value={preguntaEditando.fechaEmision}
+              onChange={(e) =>
+                actualizarCampo(
+                  "fechaEmision",
+                  e.target.value
+                )
+              }
+            />
+
+          </div>
+
+          <div className="lg:col-span-2">
+
+            <label className="mb-3 block text-sm font-semibold text-slate-700">
+              Divulgación
+            </label>
+
+            <div className="grid grid-cols-2 gap-4">
+
+              <CampoSiNo
+                label="Interna"
+                disabled={!habilitarInterna}
+                value={preguntaEditando.interna}
+                onChange={(v) =>
+                  actualizarCampo("interna", v)
+                }
+              />
+
+              <CampoSiNo
+                label="Externa"
+                disabled={!habilitarExterna}
+                value={preguntaEditando.externa}
+                onChange={(v) =>
+                  actualizarCampo("externa", v)
+                }
+              />
+
             </div>
-          )}
 
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
           <DialogFooter>
             <Button
               type="button"
@@ -878,6 +1202,85 @@ actualizadas = actualizadas.map((p) => ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+<Dialog
+    open={openDifusion}
+    onOpenChange={setOpenDifusion}
+>
+    <DialogContent className="max-w-sm">
+
+        <DialogHeader>
+            <DialogTitle>
+                Medio de divulgación
+            </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+
+            <label className="flex items-center gap-3">
+
+                <input
+                    type="checkbox"
+                    checked={habilitarInterna}
+                    onChange={(e)=>
+                        setHabilitarInterna(e.target.checked)
+                    }
+                />
+
+                Difusión interna
+
+            </label>
+
+            <label className="flex items-center gap-3">
+
+                <input
+                    type="checkbox"
+                    checked={habilitarExterna}
+                    onChange={(e)=>
+                        setHabilitarExterna(e.target.checked)
+                    }
+                />
+
+                Difusión externa
+
+            </label>
+
+        </div>
+
+        <DialogFooter>
+
+            <Button
+                variant="outline"
+                onClick={()=>{
+                    setOpenDifusion(false);
+                }}
+            >
+                Cancelar
+            </Button>
+
+            <Button
+                onClick={()=>{
+
+                    if(!habilitarInterna){
+                        actualizarCampo("interna","");
+                    }
+
+                    if(!habilitarExterna){
+                        actualizarCampo("externa","");
+                    }
+
+                    setOpenDifusion(false);
+
+                }}
+            >
+                Aceptar
+            </Button>
+
+        </DialogFooter>
+
+    </DialogContent>
+</Dialog>
+
 
       
     </div>
@@ -999,15 +1402,18 @@ function CampoSiNo({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium">{label}</label>
       <select
+       disabled={disabled}
         className="w-full rounded-md border px-3 py-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}

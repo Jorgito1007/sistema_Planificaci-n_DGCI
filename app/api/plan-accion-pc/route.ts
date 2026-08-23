@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
         FROM dbo.EvaluacionesPrincipioDetalleDGCI ev
 				LEFT JOIN dbo.Usuarios_Dgci US ON ev.ActorUserId=US.UserId
         WHERE ActorUserId = @ActorUserId
-          AND Calificacion < 5
-        ORDER BY Numero
+          AND Calificacion < 5 AND ev.Calificacion NOT IN ('')
+        ORDER BY Numero 
       `);
 
     return NextResponse.json({

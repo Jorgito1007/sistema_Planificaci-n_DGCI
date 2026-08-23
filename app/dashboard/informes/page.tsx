@@ -15,18 +15,7 @@ import {
 } from "@/components/ui/card";
 
 const informes = [
-  {
-    title: "Informe de Permisos de Usuarios",
-    description:
-      "Consulta los usuarios registrados con sus permisos asignados en módulos y submódulos.",
-    href: "/dashboard/informes/permisos-usuarios",
-    icon: ShieldCheck,
-    color: "from-blue-600 to-cyan-500",
-    bg: "bg-blue-50",
-    text: "text-blue-700",
-    detail: "Módulos, submódulos y permisos",
-    statsIcon: Users,
-  },
+ 
   {
     title: "Informe de Planes de Acción",
     description:

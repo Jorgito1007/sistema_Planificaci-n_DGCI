@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          puedeEditar: false,
+          puedeEliminar: false,
           message: "No autenticado.",
         },
         { status: 401 }
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          puedeEditar: false,
+          puedeEliminar: false,
           message: "El identificador de la pregunta no es válido.",
         },
         { status: 400 }
@@ -33,10 +33,6 @@ export async function POST(req: NextRequest) {
 
     const pool = await getPool();
 
-    /*
-      Primero verificamos si algún rol del usuario
-      le permite editar ítems.
-    */
     const permisoRol = await pool
       .request()
       .input(
@@ -51,22 +47,17 @@ export async function POST(req: NextRequest) {
         INNER JOIN dbo.Roles_Dgci r
           ON r.RoleId = ur.RoleId
         WHERE ur.UserId = @UserId
-          AND r.CanEditMatrixItems = 1;
+          AND r.CanDeleteMatrixItems = 1;
       `);
 
     if (permisoRol.recordset.length > 0) {
       return NextResponse.json({
         ok: true,
-        puedeEditar: true,
+        puedeEliminar: true,
         tipoPermiso: "rol",
       });
     }
 
-    /*
-      Si no tiene permiso general por rol,
-      verificamos un permiso particular
-      sobre la pregunta.
-    */
     const permisoPregunta = await pool
       .request()
       .input(
@@ -81,23 +72,23 @@ export async function POST(req: NextRequest) {
       )
       .query(`
         SELECT TOP 1
-          upp.CanEdit
+          upp.CanDelete
         FROM dbo.usuariosPreguntasPermisos upp
         INNER JOIN dbo.Matriz_SistemaAdministrativoDetalle md
           ON md.Id = upp.QuestionId
         WHERE upp.UserId = @UserId
           AND upp.QuestionId = @QuestionId
           AND md.Id = @QuestionId
-          AND upp.CanEdit = 1;
+          AND upp.CanDelete = 1;
       `);
 
     if (permisoPregunta.recordset.length === 0) {
       return NextResponse.json(
         {
           ok: false,
-          puedeEditar: false,
+          puedeEliminar: false,
           message:
-            "Estimado usuario, no tiene permisos para editar este ítem de pregunta.",
+            "Estimado usuario, no tiene permisos para eliminar este ítem de pregunta.",
         },
         { status: 403 }
       );
@@ -105,18 +96,18 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      puedeEditar: true,
+      puedeEliminar: true,
       tipoPermiso: "pregunta",
     });
   } catch (error: unknown) {
-    console.error("Error validando edición:", error);
+    console.error("Error validando eliminación:", error);
 
     return NextResponse.json(
       {
         ok: false,
-        puedeEditar: false,
+        puedeEliminar: false,
         message:
-          "Ocurrió un error al validar el permiso de edición.",
+          "Ocurrió un error al validar el permiso de eliminación.",
       },
       { status: 500 }
     );

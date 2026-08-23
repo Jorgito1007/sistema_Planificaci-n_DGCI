@@ -6,6 +6,7 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import { HashLoader } from "react-spinners";
+import { useNotifications } from "@/context/NotificationContext";
 
 export default function PlanAccionPage() {
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -16,6 +17,8 @@ export default function PlanAccionPage() {
   const [filas, setFilas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [planEnviado, setPlanEnviado] = useState(false);
+
+const { cargarNotificaciones } = useNotifications();
 
   useEffect(() => {
     obtenerPreguntas();
@@ -134,16 +137,20 @@ export default function PlanAccionPage() {
 
       const data = await response.json();
 
-      if (data.ok) {
-        setPlanEnviado(true);
+     if (data.ok) {
 
-        Swal.fire({
-          icon: "success",
-          title: "Éxito",
-          text: "Plan de acción enviado correctamente",
-          confirmButtonColor: "#0B3D91",
-        });
-      } else {
+  setPlanEnviado(true);
+
+  await cargarNotificaciones();
+
+  Swal.fire({
+    icon: "success",
+    title: "Éxito",
+    text: "Plan de acción enviado correctamente",
+    confirmButtonColor: "#0B3D91",
+  });
+
+} else {
         Swal.fire({
           icon: "error",
           title: "Error",

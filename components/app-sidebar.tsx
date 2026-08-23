@@ -15,6 +15,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Megaphone,
+  ShieldCheck,
 } from "lucide-react";
 
 import {
@@ -75,6 +77,12 @@ const matrizSistemaAdminSubModules = [
   { id: 25, title: "Preguntas sin Responder", href: "/dashboard/matriz_sa/Preguntas_Sresponder" },
   { id: 26, title: "Plan de Acción", href: "/dashboard/matriz_sa/Plan_Accion" },
 ];
+
+const seguridadSubModules = [
+  { id: 27, title: "Roles y Permisos", href: "/dashboard/seguridad/roles_permisos" },
+  { id: 28, title: "Auditoria del Sistema", href: "/dashboard/seguridad/auditoria_datos" },
+];
+
 
 interface AppSidebarProps {
   user: {
@@ -144,6 +152,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
     return matrizSistemaAdminSubModules.filter((s) => allowedSubSet.has(Number(s.id)));
   }, [perms, allowedSubSet]);
 
+  const visibleSeguridadSubs = useMemo(() => {
+  if (!perms) return [];
+
+  if (perms.allowAll) return seguridadSubModules;
+
+  return seguridadSubModules.filter((s) =>
+    allowedSubSet.has(Number(s.id))
+  );
+}, [perms, allowedSubSet, seguridadSubModules]);
+
   const canSeeSistemaAdmin = visibleSistemaAdminSubs.length > 0;
 
   const canSeePorComponentes =
@@ -156,9 +174,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const canSeePermisos =
     perms?.allowAll || allowedModuleSet.has(4) || false;
 
+    
+  const canSeeAvisos =
+    perms?.allowAll || allowedModuleSet.has(5) || false;
+
   const canSeeMatrizSistemaAdmin =
     (perms?.allowAll || allowedModuleSet.has(6)) &&
     visibleMatrizSistemaAdminSubs.length > 0;
+
+  const canSeeSeguridad =
+    perms?.allowAll || allowedModuleSet.has(7) || false;
 
 const menuButtonClass =
   "h-11 w-full justify-start data-[state=collapsed]:justify-center rounded-xl text-white/80 hover:bg-white/10 hover:text-white data-[active=true]:bg-blue-600 data-[active=true]:text-white data-[active=true]:shadow-md";
@@ -380,6 +405,63 @@ const menuButtonClass =
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+
+            {canSeeAvisos && (
+  <SidebarMenuItem>
+    <SidebarMenuButton
+      asChild
+      isActive={pathname.includes("/avisos")}
+      className={menuButtonClass}
+    >
+      <Link href="/dashboard/avisos">
+        <Megaphone className="h-5 w-5" />
+        {!collapsed && <span>Avisos</span>}
+      </Link>
+    </SidebarMenuButton>
+  </SidebarMenuItem>
+)}
+
+{canSeeSeguridad && (
+  <Collapsible defaultOpen={pathname.includes("/avisos")}>
+    <SidebarMenuItem>
+      <CollapsibleTrigger asChild>
+        <SidebarMenuButton
+          isActive={pathname.includes("/avisos")}
+          className={menuButtonClass}
+        >
+          <ShieldCheck className="h-5 w-5" />
+
+          {!collapsed && <span>Seguridad</span>}
+
+          {!collapsed && (
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+          )}
+        </SidebarMenuButton>
+      </CollapsibleTrigger>
+
+      {!collapsed && (
+        <CollapsibleContent className="mt-1">
+          <SidebarMenuSub className="ml-5 border-l border-white/10 pl-3">
+            {visibleSeguridadSubs.map((sub) => (
+              <SidebarMenuSubItem key={sub.href}>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={pathname === sub.href}
+                  className={subButtonClass}
+                >
+                  <Link href={sub.href} title={sub.title}>
+                    {sub.title}
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      )}
+    </SidebarMenuItem>
+  </Collapsible>
+)}
+
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

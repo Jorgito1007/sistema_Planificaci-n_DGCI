@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { getCurrentUserFromToken } from "@/lib/current-user";
+
 import { getCurrentUserId } from "@/lib/current-user";
 import { auth } from "@/auth";
 
@@ -29,14 +29,14 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
-    const me = await getCurrentUserFromToken();
+  const actorUserId = await getCurrentUserId();
 
-    if (!me?.userId) {
-      return NextResponse.json(
-        { error: "No se pudo identificar el usuario autenticado" },
-        { status: 401 }
-      );
-    }
+if (!actorUserId) {
+  return NextResponse.json(
+    { error: "No se pudo obtener el UserId del usuario autenticado" },
+    { status: 401 }
+  );
+}
 
     const pool = await getPool();
 
@@ -48,7 +48,6 @@ export async function PATCH(req: Request, context: RouteContext) {
           DocumentId,
           Nombre,
           Elaborado,
-          Fecha_elaborado,
           Aprobado,
           Fecha_Aprobado,
           Implementado,
@@ -185,33 +184,24 @@ export async function PATCH(req: Request, context: RouteContext) {
       }
     }
 
-    if (field === "Implementado") {
-      if (value === true) {
-        updateSql = `
-          UPDATE Documentos_DGCI
-          SET 
-            Implementado = 1,
-            UpdatedAt = GETDATE()
-          WHERE DocumentId = @DocumentId
-        `;
-        action = "UPDATE_IMPLEMENTADO";
-        message = "Documento implementado correctamente";
-      } else {
-        updateSql = `
-          UPDATE Documentos_DGCI
-          SET 
-            Implementado = 0,
-            Actualizado = 0,
-            Fecha_Actualizado = NULL,
-            Difundido = 0,
-            UpdatedAt = GETDATE()
-          WHERE DocumentId = @DocumentId
-        `;
-        action = "REMOVE_IMPLEMENTADO";
-        message =
-          "Se quitó Implementado y se reiniciaron Actualizado y Difundido";
-      }
-    }
+  if (field === "Implementado") {
+  updateSql = `
+    UPDATE dbo.Documentos_DGCI
+    SET
+      Implementado = @Value,
+      UpdatedAt = GETDATE()
+    WHERE DocumentId = @DocumentId
+  `;
+
+  action = value
+    ? "UPDATE_IMPLEMENTADO"
+    : "REMOVE_IMPLEMENTADO";
+
+  message = value
+    ? "Documento implementado correctamente"
+    : "Se quitó el estado Implementado";
+}
+
 
     if (field === "Actualizado") {
       if (value === true) {
@@ -254,12 +244,26 @@ export async function PATCH(req: Request, context: RouteContext) {
         : "Se quitó el estado Difundido";
     }
 
-    await pool
-      .request()
-      .input("DocumentId", Number(id))
-      .input("Value", value)
-      .input("Fecha", fecha || null) 
-      .query(updateSql);
+const updateRequest = pool
+  .request()
+  .input("DocumentId", Number(id));
+
+if (
+  field === "Implementado" ||
+  field === "Difundido"
+) {
+  updateRequest.input("Value", value);
+}
+
+if (
+  field === "Aprobado" ||
+  field === "Actualizado"
+) {
+  updateRequest.input("Fecha", fecha);
+}
+
+await updateRequest.query(updateSql);
+
 
     const estadoActualizado = await pool
       .request()
@@ -269,7 +273,6 @@ export async function PATCH(req: Request, context: RouteContext) {
           DocumentId,
           Nombre,
           Elaborado,
-          Fecha_elaborado,
           Aprobado,
           Fecha_Aprobado,
           Implementado,
@@ -285,7 +288,7 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     await pool
       .request()
-      .input("ActorUserId", me.userId)
+      .input("ActorUserId", actorUserId)
       .input("Action", action)
       .input("Entity", "Documentos_DGCI")
       .input("EntityId", String(id))
@@ -295,7 +298,7 @@ export async function PATCH(req: Request, context: RouteContext) {
           documento: documento.Nombre,
           campo: field,
           nuevoValor: value,
-          usuarioEmail: me.email ?? null,
+          usuarioEmail: null,
           estadoFinal: actualizado,
         })
       )

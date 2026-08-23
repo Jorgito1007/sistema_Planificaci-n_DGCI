@@ -6,14 +6,19 @@ export async function GET() {
     const pool = await getPool();
 
     const result = await pool.request().query(`
-      SELECT
+  SELECT
         u.UserId,
         u.FullName,
         m.ModuleName,
-        s.SubModuleName
+        s.SubModuleName,
+		rl.RoleName
       FROM dbo.Usuarios_Dgci u
       LEFT JOIN dbo.usuariosModulosPermisos ump
         ON u.UserId = ump.UserId
+LEFT JOIN dbo.UserRoles_Dgci ur
+ON u.UserId=ur.UserId
+INNER JOIN dbo.Roles_Dgci rl
+ON ur.RoleId=rl.RoleId
       INNER JOIN dbo.Modulos_Dgci m
         ON m.ModuleId = ump.ModuleId
       INNER JOIN dbo.usuariosSubmodulospermisos usp

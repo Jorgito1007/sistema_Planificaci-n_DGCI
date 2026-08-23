@@ -8,6 +8,11 @@ import React from "react";
 
 import { useEffect, useState } from "react";
 import { HoloPulse } from "@/components/ui/holo-pulse-loader";
+import Swal from "sweetalert2";
+import {
+  FileDown,
+  BadgeCheck,
+} from "lucide-react";
 
 import {
   BarChart,
@@ -53,6 +58,53 @@ useEffect(() => {
       console.log("COMPONENTE RESPUESTAS:", res);
       setAfirmativasPrincipios(res);
     });
+}, []);
+
+useEffect(() => {
+  async function cargarPermisoAprobacion() {
+    try {
+      setCargandoPermisos(true);
+
+      const res = await fetch(
+        "/api/matriz-sistema-administrativo/permisos",
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
+
+      const texto = await res.text();
+
+      const respuesta = texto
+        ? JSON.parse(texto)
+        : null;
+
+      if (!res.ok || !respuesta?.ok) {
+        throw new Error(
+          respuesta?.message ||
+            "No se pudo consultar el permiso de aprobación."
+        );
+      }
+
+      setPuedeAprobarResultados(
+        Boolean(
+          respuesta.permisos?.puedeAprobarResultados
+        )
+      );
+    } catch (error) {
+      console.error(
+        "Error cargando permiso de aprobación:",
+        error
+      );
+
+      setPuedeAprobarResultados(false);
+    } finally {
+      setCargandoPermisos(false);
+    }
+  }
+
+  cargarPermisoAprobacion();
 }, []);
 
 const getComponenteData = (index: number) => {
@@ -231,6 +283,12 @@ const promedioGeneral = (
 
 
 const [exportandoPDF, setExportandoPDF] = useState(false);
+
+const [puedeAprobarResultados, setPuedeAprobarResultados] =
+  useState(false);
+
+const [cargandoPermisos, setCargandoPermisos] =
+  useState(true);
 
 const sistemaMap = [2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -436,19 +494,94 @@ const exportarPDF = async () => {
   }
 };
 
+async function aprobarResultados() {
+  const result = await Swal.fire({
+    title: "¿Aprobar resultados?",
+    text: "Una vez aprobados quedarán registrados oficialmente.",
+    icon: "question",
+    showCancelButton: true,
+    confirmButtonText: "Sí, aprobar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#16a34a",
+    cancelButtonColor: "#64748b",
+  });
+
+  if (!result.isConfirmed) return;
+
+  Swal.fire({
+    icon: "success",
+    title: "Resultados aprobados",
+    text: "La evaluación fue aprobada correctamente.",
+    confirmButtonColor: "#16a34a",
+  });
+}
+
   return (
 
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap gap-2">
    <button
-        onClick={exportarPDF}
-        disabled={exportandoPDF}
-        className="rounded bg-red-600 px-4 py-2 text-white transition disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {exportandoPDF ? "Exportando..." : "Exportar PDF"}
-      </button>
+    type="button"
+    onClick={exportarPDF}
+    disabled={exportandoPDF}
+    className="
+      h-11
+      rounded-xl
+      bg-gradient-to-r
+             inline-flex
+        items-center
+      justify-cente
+      from-red-600
+      to-red-500
+      px-5
+      text-white
+      shadow-lg
+      transition-all
+      duration-300
+      hover:scale-105
+      hover:from-red-700
+      hover:to-red-600
+      disabled:cursor-not-allowed
+      disabled:opacity-60
+    "
+  >
+    <FileDown className="mr-2 h-5 w-5" />
+    {exportandoPDF ? "Exportando PDF..." : "Exportar PDF"}
+  </button>
 
-   
+ {puedeAprobarResultados && (
+  <button
+    type="button"
+    onClick={aprobarResultados}
+    disabled={cargandoPermisos}
+    className="
+      inline-flex
+      h-11
+      items-center
+      justify-center
+      gap-2
+      rounded-xl
+      bg-gradient-to-r
+      from-emerald-600
+      to-green-500
+      px-5
+      font-medium
+      text-white
+      shadow-lg
+      transition-all
+      duration-300
+      hover:scale-105
+      hover:from-emerald-700
+      hover:to-green-600
+      disabled:cursor-not-allowed
+      disabled:opacity-60
+      disabled:hover:scale-100
+    "
+  >
+    <BadgeCheck className="h-5 w-5" />
+    Aprobar resultados
+  </button>
+)}
       </div>
 
      <div ref={reportRef} className="bg-white">

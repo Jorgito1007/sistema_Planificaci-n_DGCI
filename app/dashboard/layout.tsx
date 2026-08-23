@@ -11,7 +11,9 @@ import {
   SidebarInset,
 } from "@/components/ui/sidebar";
 
+import { NotificationProvider } from "@/context/NotificationContext";
 import { getUserByEmail } from "@/lib/current-user";
+import AvisoSistemaModal from "@/components/AvisoSistemaModal";
 
 type SidebarUser = {
   email: string;
@@ -65,21 +67,23 @@ export default async function DashboardLayout({
   }
 
  return (
-  <SidebarProvider
-    defaultOpen={true}
-    className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
-  >
-    <AppSidebar user={user} />
+  <NotificationProvider>
+    <SidebarProvider
+      defaultOpen={true}
+      className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
+    >
+      <AppSidebar user={user} />
 
-    <SidebarInset className="min-w-0 bg-slate-50 overflow-hidden ">
-      <Topbar user={user} />
-
-      <main className="h-[calc(100vh-3.5rem)] overflow-auto p-4 ">
-        <div className="min-w-0">
-          {children}
-        </div>
-      </main>
-    </SidebarInset>
-  </SidebarProvider>
+      <SidebarInset className="min-w-0 bg-slate-50 overflow-hidden">
+        <Topbar user={user} />
+<AvisoSistemaModal />
+        <main className="h-[calc(100vh-3.5rem)] overflow-auto p-4">
+          <div className="min-w-0">
+            {children}
+          </div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  </NotificationProvider>
 );
 }
