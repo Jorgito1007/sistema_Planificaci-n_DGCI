@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Dialog,
   DialogContent,
@@ -10,16 +11,20 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import Swal from "sweetalert2";
+import { HashLoader } from "react-spinners";
 import {
   PlusCircle,
   Pencil,
   Trash2,
+  Eye,
+  Download,
+  ClipboardCheck,
 } from "lucide-react";
 import { useNotifications } from "@/context/NotificationContext";
 
 type PreguntaDetalleForm = {
   id?: number;
-    Id?: number;
+  Id?: number;
   numero: string;
   texto: string;
   cargo: string;
@@ -33,6 +38,9 @@ type PreguntaDetalleForm = {
   calificacion: number;
   nivel: string;
   tipoDocumento: string;
+  documentId?: number | null;
+nombreDocumento?: string;
+pdfUrl?: string;
   descripcion: string;
   fechaEmision: string;
   interna: string;
@@ -135,16 +143,22 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
 
 export default function MatrizContIntegradaPage() {
   const SUBMODULE_KEY = "m_ConIntegrada";
+
+const tablaRef = useRef<HTMLTableElement>(null);
+const scrollTablaRef = useRef<HTMLDivElement>(null);
+const scrollFijoRef = useRef<HTMLDivElement>(null);
+const [anchoTabla, setAnchoTabla] = useState(2200);
+
     const [cargos, setCargos] = useState<Cargo[]>([]);
 const [roleKey, setRoleKey] = useState("");
 
 const puedeEditarTextoPregunta =
-  roleKey === "Administrador" ||
-  roleKey === "SubAdministrador";
+  String(roleKey).trim().toLowerCase() === "administrador" ||
+  String(roleKey).trim().toLowerCase() === "subadministrador";
 
 
   const [open, setOpen] = useState(false);
-  const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [preguntas, setPreguntas] = useState<PreguntaDetalleForm[]>([]);
   const [preguntaEditando, setPreguntaEditando] =
     useState<PreguntaDetalleForm | null>(null);
@@ -155,6 +169,12 @@ const puedeEditarTextoPregunta =
 
 const [habilitarInterna, setHabilitarInterna] = useState(false);
 const [habilitarExterna, setHabilitarExterna] = useState(false);
+
+// Documento de evidencia vinculado a la pregunta
+const [nombreDocumento, setNombreDocumento] = useState("");
+const [archivoDocumento, setArchivoDocumento] = useState<File | null>(null);
+const [guardandoDocumento, setGuardandoDocumento] = useState(false);
+const [reemplazarDocumento, setReemplazarDocumento] = useState(false);
 
 const [permisosItems, setPermisosItems] = useState({
   puedeAgregar: false,
@@ -168,6 +188,67 @@ const puedeAgregarItems = permisosItems.puedeAgregar;
 const puedeEditarPregunta = permisosItems.puedeEditar;
 const puedeEliminarPregunta = permisosItems.puedeEliminar;
 const { cargarNotificaciones } = useNotifications();
+
+const [menuPosicion, setMenuPosicion] = useState<{
+  top: number;
+  left: number;
+  arriba: boolean;
+} | null>(null);
+
+const seleccionarPregunta = (
+  event: React.MouseEvent<HTMLTableRowElement>,
+  index: number
+) => {
+  const fila = event.currentTarget;
+  const rect = fila.getBoundingClientRect();
+
+  // Si vuelve a seleccionar la misma fila, cerrar menú
+  if (selectedIndex === index) {
+    setSelectedIndex(null);
+    setMenuPosicion(null);
+    return;
+  }
+
+  setSelectedIndex(index);
+
+  const menuWidth = 190;
+  const margen = 12;
+
+  // Posición horizontal visible
+  let left = rect.left + 20;
+
+  // Evitar que se salga por la derecha
+  if (left + menuWidth > window.innerWidth - margen) {
+    left = window.innerWidth - menuWidth - margen;
+  }
+
+  // Evitar que se meta debajo del sidebar
+  const sidebarWidth = 250;
+
+  if (left < sidebarWidth + margen) {
+    left = sidebarWidth + margen;
+  }
+
+  // Arriba de la fila
+  let top = rect.top - 10;
+
+  // Si no hay espacio arriba, colocarlo debajo
+  if (top < 70) {
+    top = rect.bottom + 10;
+
+    setMenuPosicion({
+      top,
+      left,
+      arriba: false,
+    });
+  } else {
+    setMenuPosicion({
+      top,
+      left,
+      arriba: true,
+    });
+  }
+};
 
   const cargarRegistros = async () => {
     try {
@@ -236,10 +317,10 @@ async function validarYEliminar() {
     return;
   }
 
-  const pregunta = preguntas[selectedIndex];
+  const pregunta = preguntasOrdenadas[selectedIndex];
 
   if (!pregunta?.id) {
-    Swal.fire({
+    await Swal.fire({
       icon: "warning",
       title: "Ítem no válido",
       text: "No se encontró el identificador del ítem seleccionado.",
@@ -249,6 +330,29 @@ async function validarYEliminar() {
     return;
   }
 
+  // ==========================================
+  // CONFIRMACIÓN ANTES DE ELIMINAR
+  // ==========================================
+  const confirmacion = await Swal.fire({
+    icon: "warning",
+    title: "¿Desea eliminar esta pregunta?",
+    text: `Se eliminará la pregunta ${pregunta.numero}. Esta acción no se puede deshacer.`,
+    showCancelButton: true,
+    confirmButtonText: "Sí, eliminar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#dc2626",
+    cancelButtonColor: "#64748b",
+    reverseButtons: true,
+  });
+
+  // Si presiona cancelar
+  if (!confirmacion.isConfirmed) {
+    return;
+  }
+
+  // ==========================================
+  // VALIDAR PERMISO
+  // ==========================================
   try {
     const res = await fetch(
       "/api/matriz-sistema-administrativo/validar-eliminacion",
@@ -278,7 +382,11 @@ async function validarYEliminar() {
       return;
     }
 
+    // ==========================================
+    // ELIMINAR
+    // ==========================================
     await eliminarSeleccionada();
+
   } catch (error) {
     console.error("Error validando eliminación:", error);
 
@@ -290,6 +398,7 @@ async function validarYEliminar() {
     });
   }
 }
+
 
 
 //Validar y editar preguntas de la matrix del sistema administrativo
@@ -421,8 +530,13 @@ const abrirNuevaPregunta = () => {
     crearPreguntaDetalleVacia(siguiente)
   );
 
-  setEditIndex(null);
-  setOpen(true);
+ setEditIndex(null);
+
+// Limpiar documento
+setNombreDocumento("");
+setArchivoDocumento(null);
+
+setOpen(true);
 };
 
   const editarSeleccionada = () => {
@@ -490,68 +604,453 @@ async function eliminarSeleccionada() {
     setPreguntaEditando(recalcularPregunta(actualizada));
   };
 
+  //Documentos///
+  async function guardarDocumentoPregunta(
+    questionId: number
+  ) {
+    if (!archivoDocumento) {
+      return true;
+    }
+  
+    if (!nombreDocumento.trim()) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Documento",
+        text: "Debe ingresar el nombre del documento.",
+        confirmButtonColor: "#1d4ed8",
+      });
+  
+      return false;
+    }
+  
+    if (!preguntaEditando) {
+      return false;
+    }
+  
+    try {
+      setGuardandoDocumento(true);
+  
+      const formData = new FormData();
+  
+      formData.append(
+        "Nombre",
+        nombreDocumento.trim()
+      );
+  
+   
+      formData.append(
+        "SubModuleId",
+        "20"
+      );
+  
+      formData.append(
+        "OrigenMatriz",
+        "true"
+      );
+  
+      formData.append(
+        "TipoMatriz",
+        "SISTEMA_ADMINISTRATIVO"
+      );
+  
+      formData.append(
+        "QuestionId",
+        String(questionId)
+      );
+  
+      formData.append(
+        "Elaborado",
+        String(preguntaEditando.existe === 1)
+      );
+  
+      formData.append(
+        "Aprobado",
+        String(preguntaEditando.aprobado === 1)
+      );
+  
+      formData.append(
+        "Implementado",
+        String(preguntaEditando.implementado === 1)
+      );
+  
+      formData.append(
+        "Actualizado",
+        String(preguntaEditando.actualizado === 1)
+      );
+  
+      formData.append(
+        "Difundido",
+        String(preguntaEditando.difundido === 1)
+      );
+  
+      if (
+        preguntaEditando.aprobado === 1 &&
+        preguntaEditando.fechaEmision
+      ) {
+        formData.append(
+          "Fecha_Aprobado",
+          preguntaEditando.fechaEmision
+        );
+      }
+  
+      if (
+        preguntaEditando.actualizado === 1 &&
+        preguntaEditando.fechaEmision
+      ) {
+        formData.append(
+          "Fecha_Actualizado",
+          preguntaEditando.fechaEmision
+        );
+      }
+  
+      formData.append(
+        "file",
+        archivoDocumento
+      );
+  
+      const response = await fetch(
+        "/api/documents",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        await Swal.fire({
+          icon: "error",
+          title: "Documento",
+          text:
+            data.error ||
+            "No se pudo guardar el documento.",
+          confirmButtonColor: "#dc2626",
+        });
+  
+        return false;
+      }
+  
+      return true;
+  
+    } catch (error) {
+      console.error(
+        "Error guardando documento:",
+        error
+      );
+  
+      await Swal.fire({
+        icon: "error",
+        title: "Documento",
+        text: "Error al guardar el documento.",
+        confirmButtonColor: "#dc2626",
+      });
+  
+      return false;
+  
+    } finally {
+      setGuardandoDocumento(false);
+    }
+  }
+  
+  //Guardar//
   const guardarModal = async () => {
     if (!preguntaEditando) return;
-
+  
     if (!preguntaEditando.texto.trim()) {
-      alert("Debe ingresar el texto de la pregunta.");
-      return;
-    }
-
-    let actualizadas: PreguntaDetalleForm[] = [];
-
-if (editIndex === null) {
-  actualizadas = [...preguntasOrdenadas, preguntaEditando];
-} else {
-  actualizadas = preguntasOrdenadas.map((p, i) =>
-    i === editIndex ? preguntaEditando : p
-  );
-}
-
-actualizadas = actualizadas.map((p) => ({
-  ...recalcularPregunta(p),
-}));
-
-    await guardarTodo(actualizadas);
-    setOpen(false);
-    setPreguntaEditando(null);
-    setEditIndex(null);
-  };
-
-  const guardarTodo = async (preguntasActualizadas: PreguntaDetalleForm[]) => {
-    try {
-      const res = await fetch("/api/matriz-sistema-administrativo/guardar", {
-        method: "POST",
-        credentials:"include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          subModuleKey: SUBMODULE_KEY,
-          preguntas: preguntasActualizadas,
-        }),
-      });
-
-      const json = await res.json();
-
-    if (!json.ok) {
-      Swal.fire({
+      await Swal.fire({
         icon: "warning",
         title: "Validación",
-        text: json.message || "No se pudo guardar.",
+        text: "Debe ingresar el texto de la pregunta.",
         confirmButtonColor: "#1d4ed8",
       });
       return;
     }
+  
+    // Si eligió reemplazar, debe seleccionar archivo
+    if (
+      reemplazarDocumento &&
+      preguntaEditando.documentId &&
+      !archivoDocumento
+    ) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Seleccione un archivo",
+        text: "Ha seleccionado reemplazar el documento, pero todavía no ha elegido el nuevo archivo.",
+        confirmButtonColor: "#1d4ed8",
+      });
+  
+      return;
+    }
+  
+    try {
+      // ==============================
+      // ACTIVAR LOADER
+      // ==============================
+      setLoading(true);
+  
+      let actualizadas: PreguntaDetalleForm[] = [];
+  
+      if (editIndex === null) {
+        actualizadas = [
+          ...preguntasOrdenadas,
+          preguntaEditando,
+        ];
+      } else {
+        actualizadas = preguntasOrdenadas.map((p, i) =>
+          i === editIndex ? preguntaEditando : p
+        );
+      }
+  
+      actualizadas = actualizadas.map((p) => ({
+        ...recalcularPregunta(p),
+      }));
+  
+      // ==============================
+      // GUARDAR MATRIZ
+      // ==============================
+      const resultadoGuardado =
+        await guardarTodo(actualizadas);
+  
+      if (!resultadoGuardado) {
+        return;
+      }
+  
+      // ==============================
+      // OBTENER ID REAL DE PREGUNTA
+      // ==============================
+      const preguntaGuardada =
+        resultadoGuardado.preguntas?.find(
+          (p: { id: number; numero: string }) =>
+            String(p.numero) ===
+            String(preguntaEditando.numero)
+        );
+  
+      if (!preguntaGuardada?.id) {
+        await Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "La pregunta fue guardada, pero no se pudo obtener su identificador.",
+          confirmButtonColor: "#dc2626",
+        });
+  
+        return;
+      }
+  
+      // ==============================
+      // DOCUMENTO
+      // ==============================
+      if (archivoDocumento) {
+  
+        // Reemplazar documento existente
+        if (
+          preguntaEditando.documentId &&
+          reemplazarDocumento
+        ) {
+          const reemplazado =
+            await reemplazarDocumentoPregunta(
+              preguntaEditando.documentId
+            );
+  
+          if (!reemplazado) {
+            return;
+          }
+        }
+  
+        // Crear documento nuevo
+        else if (!preguntaEditando.documentId) {
+          const documentoGuardado =
+            await guardarDocumentoPregunta(
+              preguntaGuardada.id
+            );
+  
+          if (!documentoGuardado) {
+            return;
+          }
+        }
+      }
+  
+      // ==============================
+      // RECARGAR MATRIZ
+      // ==============================
+      await cargarRegistros();
+  
+      // ==============================
+      // CERRAR Y LIMPIAR
+      // ==============================
+      setOpen(false);
+      setPreguntaEditando(null);
+      setEditIndex(null);
+  
+      setNombreDocumento("");
+      setArchivoDocumento(null);
+      setReemplazarDocumento(false);
+  
+  // Quitar loader antes del mensaje
+  setLoading(false);
+  
+  
+  await Swal.fire({
+    icon: "success",
+    title: "Guardado correctamente",
+    text: "La información se guardó correctamente.",
+    confirmButtonColor: "#0B3D91",
+    confirmButtonText: "Aceptar",
+  });
+  
+    } catch (error) {
+      console.error("Error guardando:", error);
+  
+      await Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Ocurrió un error mientras se guardaba la información.",
+        confirmButtonColor: "#dc2626",
+      });
+  
+    } finally {
+      // SIEMPRE se apaga el loader
+      setLoading(false);
+    }
+  };
+  
+  
+    const reemplazarDocumentoPregunta = async (
+    documentId: number
+  ): Promise<boolean> => {
+    try {
+      if (!archivoDocumento) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Archivo requerido",
+          text: "Debe seleccionar el nuevo archivo.",
+          confirmButtonColor: "#1d4ed8",
+        });
+  
+        return false;
+      }
+  
+      if (!nombreDocumento.trim()) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Nombre requerido",
+          text: "Debe ingresar el nombre del documento.",
+          confirmButtonColor: "#1d4ed8",
+        });
+  
+        return false;
+      }
+  
+      const formData = new FormData();
+  
+      formData.append(
+        "DocumentId",
+        String(documentId)
+      );
+  
+      formData.append(
+        "Nombre",
+        nombreDocumento.trim()
+      );
+  
+      formData.append(
+        "file",
+        archivoDocumento
+      );
+  
+      const res = await fetch(
+        "/api/documents/reemplazar",
+        {
+          method: "PUT",
+          body: formData,
+          credentials: "include",
+        }
+      );
+  
+      const data = await res.json();
+  
+      if (!res.ok || !data.ok) {
+        await Swal.fire({
+          icon: "error",
+          title: "No se pudo reemplazar",
+          text:
+            data.error ||
+            "No fue posible reemplazar el documento.",
+          confirmButtonColor: "#dc2626",
+        });
+  
+        return false;
+      }
+  
+      return true;
+  
+    } catch (error) {
+      console.error(
+        "Error reemplazando documento:",
+        error
+      );
+  
+      await Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Ocurrió un error al reemplazar el documento.",
+        confirmButtonColor: "#dc2626",
+      });
+  
+      return false;
+    }
+  };
+  
     
-    await cargarRegistros();
-
+  const guardarTodo = async (
+    preguntasActualizadas: PreguntaDetalleForm[]
+  ) => {
+    try {
+      const res = await fetch(
+        "/api/matriz-sistema-administrativo/guardar",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            subModuleKey: SUBMODULE_KEY,
+            preguntas: preguntasActualizadas,
+          }),
+        }
+      );
+  
+      const json = await res.json();
+  
+      if (!json.ok) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Validación",
+          text: json.message || "No se pudo guardar.",
+          confirmButtonColor: "#1d4ed8",
+        });
+  
+        return null;
+      }
+  
+      await cargarRegistros();
+      await cargarNotificaciones();
+  
+      return json;
+  
     } catch (error) {
       console.error(error);
-      alert("Error al guardar.");
+  
+      await Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Error al guardar.",
+        confirmButtonColor: "#dc2626",
+      });
+  
+      return null;
     }
-
-    await cargarNotificaciones();
   };
 
  const preguntasOrdenadas = useMemo(() => {
@@ -584,6 +1083,145 @@ actualizadas = actualizadas.map((p) => ({
     return detalleA - detalleB;
   });
 }, [preguntas]);
+
+// ============================================================
+// SCROLL - SINCRONIZACIÓN TABLA ↔ SCROLL FIJO
+// ============================================================
+
+useEffect(() => {
+  const tabla = scrollTablaRef.current;
+  const fijo = scrollFijoRef.current;
+
+  if (!tabla || !fijo) return;
+
+  let sincronizando = false;
+
+  const moverDesdeTabla = () => {
+    if (sincronizando) return;
+
+    sincronizando = true;
+
+    const maxTabla =
+      tabla.scrollWidth - tabla.clientWidth;
+
+    const maxFijo =
+      fijo.scrollWidth - fijo.clientWidth;
+
+    if (maxTabla > 0 && maxFijo > 0) {
+      const porcentaje =
+        tabla.scrollLeft / maxTabla;
+
+      fijo.scrollLeft =
+        porcentaje * maxFijo;
+    }
+
+    requestAnimationFrame(() => {
+      sincronizando = false;
+    });
+  };
+
+
+  const moverDesdeFijo = () => {
+    if (sincronizando) return;
+
+    sincronizando = true;
+
+    const maxTabla =
+      tabla.scrollWidth - tabla.clientWidth;
+
+    const maxFijo =
+      fijo.scrollWidth - fijo.clientWidth;
+
+    if (maxTabla > 0 && maxFijo > 0) {
+      const porcentaje =
+        fijo.scrollLeft / maxFijo;
+
+      tabla.scrollLeft =
+        porcentaje * maxTabla;
+    }
+
+    requestAnimationFrame(() => {
+      sincronizando = false;
+    });
+  };
+
+
+  tabla.addEventListener(
+    "scroll",
+    moverDesdeTabla
+  );
+
+  fijo.addEventListener(
+    "scroll",
+    moverDesdeFijo
+  );
+
+
+  return () => {
+    tabla.removeEventListener(
+      "scroll",
+      moverDesdeTabla
+    );
+
+    fijo.removeEventListener(
+      "scroll",
+      moverDesdeFijo
+    );
+  };
+
+}, []);
+
+
+// ============================================================
+// CALCULAR ANCHO REAL DE LA TABLA
+// ============================================================
+
+useEffect(() => {
+
+  const actualizarAncho = () => {
+
+    if (tablaRef.current) {
+
+      const anchoReal =
+        tablaRef.current.scrollWidth;
+
+      setAnchoTabla(anchoReal);
+
+    }
+
+  };
+
+
+  // Calculamos inicialmente
+  actualizarAncho();
+
+
+  // Recalculamos después de que React termine de pintar
+  const frame = requestAnimationFrame(() => {
+    actualizarAncho();
+  });
+
+
+  // Si cambia el tamaño de la ventana
+  window.addEventListener(
+    "resize",
+    actualizarAncho
+  );
+
+
+  return () => {
+
+    cancelAnimationFrame(frame);
+
+    window.removeEventListener(
+      "resize",
+      actualizarAncho
+    );
+
+  };
+
+}, [preguntasOrdenadas]);
+
 
   function badgeSiNo(valor: string) {
     const esSi = String(valor).toUpperCase() === "SI";
@@ -620,24 +1258,88 @@ actualizadas = actualizadas.map((p) => ({
 
   return (
     <div className="space-y-6 p-6">
-      <div className="overflow-hidden rounded-2xl border bg-[#e7c0a1] shadow-sm">
-        <div className="border-b border-black px-4 py-4">
-          <h1 className="text-lg font-bold uppercase">
-            6. CONTABILIDAD INTEGRADA
-          </h1>
-        </div>
-        <div className="px-4 py-5">
-          <p className="text-sm font-medium leading-7 text-justify">
-           La Contabilidad Gubernamental deberá integrar las transacciones presupuestarias,financieras 
+      {loading && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
+              <div className="flex min-w-[280px] flex-col items-center rounded-2xl bg-white px-10 py-8 shadow-2xl">
+      
+                <HashLoader
+                  color="#0B3D91"
+                  loading={loading}
+                  size={50}
+                  speedMultiplier={1}
+                />
+      
+                <p className="mt-5 text-base font-semibold text-slate-800">
+                  Guardando información
+                </p>
+      
+                <p className="mt-1 text-sm text-slate-500">
+                  Espere un momento...
+                </p>
+      
+              </div>
+            </div>
+          )}
+   
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.06)]">
+
+  {/* =========================================================
+      ENCABEZADO
+  ========================================================= */}
+  <div className="relative overflow-hidden border-b border-blue-100 bg-gradient-to-r from-[#EFF6FF] via-[#F0F9FF] to-[#ECFEFF] px-6 py-5">
+
+    {/* Decoración */}
+    <div className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full bg-[#0B3D91]/5" />
+
+    <div className="relative flex items-center gap-4">
+
+      {/* Número de sección */}
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0B3D91] text-sm font-bold text-white shadow-md shadow-blue-900/20">
+        6
+      </div>
+
+      {/* Título */}
+      <div>
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#168AAD]">
+          Sistema Administrativo
+        </p>
+
+        <h1 className="text-lg font-bold tracking-tight text-[#123B5D]">
+          Contabilidad Integrada
+        </h1>
+      </div>
+
+    </div>
+  </div>
+
+
+  {/* =========================================================
+      CONTENIDO
+  ========================================================= */}
+  <div className="px-6 py-6">
+
+    <div className="flex gap-4">
+
+      {/* Línea decorativa */}
+      <div className="w-1 shrink-0 rounded-full bg-gradient-to-b from-[#0B3D91] to-[#168AAD]" />
+
+      {/* Descripción */}
+      <p className="text-justify text-sm font-normal leading-7 text-slate-600">
+   La Contabilidad Gubernamental deberá integrar las transacciones presupuestarias,financieras 
            y patrimoniales en un sistema común, oportuno y confiable, destino y fuente de los datos expresados
            en términos monetarios.El Sistema se sujetará a los procesos señalados por las Normas que expida el
         órgano rector correspondiente.Las entidades no dependientes del Tesoro Nacional diseñarán su propio sistema
         de Contabilidad Integrada.
-          </p>
-        </div>
-      </div>
+      </p>
 
-      <div className="mt-4 flex flex-wrap justify-end gap-3">
+    </div>
+
+  </div>
+
+</div>
+
+
+     <div className="mt-4 flex flex-wrap justify-end gap-3">
   {puedeAgregarItems && (
     <Button
       type="button"
@@ -649,239 +1351,816 @@ actualizadas = actualizadas.map((p) => ({
       Agregar ítem
     </Button>
   )}
-
-  {puedeEditarPregunta && (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={validarYEditar}
-      disabled={
-        cargandoPermisos ||
-        selectedIndex === null
-      }
-      className="rounded-xl border-amber-500 text-amber-700 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-amber-50"
-    >
-      <Pencil className="mr-2 h-5 w-5" />
-      Editar ítem
-    </Button>
-  )}
-
-  {puedeEliminarPregunta && (
-    <Button
-      type="button"
-      onClick={validarYEliminar}
-      disabled={
-        cargandoPermisos ||
-        selectedIndex === null
-      }
-      className="rounded-xl bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:from-red-700 hover:to-rose-600"
-    >
-      <Trash2 className="mr-2 h-5 w-5" />
-      Eliminar ítem
-    </Button>
-  )}
 </div>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="border-b bg-slate-100 px-4 py-3">
-          <h3 className="text-base font-semibold text-slate-800">
-            Matriz de Evaluación - Contabilidad Integrada
+
+<div className="w-full min-w-0">
+
+  {/* =========================================================
+      TARJETA SUPERIOR
+      Independiente de la tabla
+  ========================================================= */}
+  <div className="mb-4 overflow-hidden rounded-2xl border border-blue-200/50 bg-gradient-to-r from-[#0B3D91] via-[#145DA0] to-[#168AAD] shadow-lg shadow-blue-900/10">
+
+    <div className="relative px-6 py-5">
+
+      {/* Decoraciones */}
+      <div className="pointer-events-none absolute -right-10 -top-14 h-32 w-32 rounded-full bg-white/10" />
+
+      <div className="pointer-events-none absolute right-16 top-7 h-16 w-16 rounded-full bg-white/5" />
+
+      {/* Contenido */}
+      <div className="relative flex items-center gap-4">
+
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 shadow-inner backdrop-blur-sm">
+          <ClipboardCheck className="h-6 w-6 text-white" />
+        </div>
+
+        <div>
+          <h3 className="text-lg font-bold tracking-tight text-white">
+            Matriz de Evaluación
           </h3>
+
+          
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-[2200px] w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-[#d9e7f5] text-center font-semibold">
-                <th rowSpan={4} className="border px-2 py-2 w-[80px]">
-                  N°
-                </th>
-                <th rowSpan={4} className="border px-2 py-2 min-w-[500px]">
-            
-                </th>
-
-                <th className="border px-2 py-2 min-w-[180px]">RESPONSABLE</th>
-
-                <th colSpan={7} className="border px-2 py-2">
-                  CRITERIOS DE VALORACIÓN
-                </th>
-
-                <th
-                  colSpan={2}
-                  rowSpan={2}
-                  className="border px-2 py-2 bg-[#bcd4ec]"
-                >
-                  Nivel de cumplimiento
-                </th>
-
-                <th colSpan={3} rowSpan={2} className="border px-2 py-2">
-                  EVIDENCIAS DE CUMPLIMIENTO DE LOS PARÁMETROS ESTABLECIDOS
-                </th>
-
-                <th colSpan={2} className="border px-2 py-2">
-                  DIFUSIÓN / COMUNICACIÓN
-                </th>
-              </tr>
-
-              <tr className="bg-[#eef4fb] text-center">
-                <th rowSpan={3} className="border px-2 py-2 min-w-[180px]">
-                  CARGO
-                </th>
-
-                <th colSpan={3} className="border px-2 py-2">
-                  Presente
-                </th>
-
-                <th rowSpan={3} className="border px-2 py-2 min-w-[90px]">
-                  Está presente
-                </th>
-
-                <th colSpan={2} className="border px-2 py-2">
-                  Funcionando
-                </th>
-
-                <th rowSpan={3} className="border px-2 py-2 min-w-[95px]">
-                  Está funcionando
-                </th>
-
-                <th rowSpan={3} className="border px-2 py-2 min-w-[100px]">
-                  INTERNA
-                </th>
-
-                <th rowSpan={3} className="border px-2 py-2 min-w-[100px]">
-                  EXTERNA
-                </th>
-              </tr>
-
-              <tr className="bg-[#eef4fb] text-center">
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">
-                  Existe
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">
-                  Aprobado
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">
-                  Difundido
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[80px]">
-                  Implementado
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[80px]">
-                  Actualizado
-                </th>
-                <th
-                  rowSpan={2}
-                  className="border px-2 py-2 min-w-[90px] bg-[#d6e5f4]"
-                >
-                  Calificación
-                </th>
-                <th
-                  rowSpan={2}
-                  className="border px-2 py-2 min-w-[100px] bg-[#d6e5f4]"
-                >
-                  Nivel
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[160px]">
-                  Tipo de documento
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[260px]">
-                  Descripción
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[170px]">
-                  Fecha de emisión / aprobación
-                </th>
-              </tr>
-
-              <tr className="bg-[#eef4fb] text-center">
-                <th className="border px-2 py-2"></th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {preguntasOrdenadas.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={17}
-                    className="border px-4 py-8 text-center text-slate-500"
-                  >
-                    Aún no hay preguntas registradas.
-                  </td>
-                </tr>
-              ) : (
-                preguntasOrdenadas.map((pregunta, index) => (
-                  <tr
-                    key={pregunta.numero}
-                   onClick={() =>
-  setSelectedIndex((prev) => (prev === index ? null : index))
-} 
-                    className={`cursor-pointer ${
-                      selectedIndex === index
-                        ? "bg-blue-100 ring-1 ring-blue-300"
-                        : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.numero}
-                    </td>
-                    <td className="border px-2 py-2">{pregunta.texto}</td>
-                                <td className="border px-2 py-2 align-top">
-  {pregunta.cargo || "-"}
-</td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.existe}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.aprobado}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.difundido}
-                    </td>
-
-                    <td className="border px-2 py-2 text-center">
-                      {badgeSiNo(pregunta.estaPresente)}
-                    </td>
-
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.implementado}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.actualizado}
-                    </td>
-
-                    <td className="border px-2 py-2 text-center">
-                      {badgeSiNo(pregunta.estaFuncionando)}
-                    </td>
-
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.calificacion}
-                    </td>
-
-                    <td className="border px-2 py-2 text-center">
-                      {badgeNivel(pregunta.nivel)}
-                    </td>
-
-                    <td className="border px-2 py-2">
-                      {pregunta.tipoDocumento}
-                    </td>
-                    <td className="border px-2 py-2">
-                      {pregunta.descripcion}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.fechaEmision}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.interna}
-                    </td>
-                    <td className="border px-2 py-2 text-center">
-                      {pregunta.externa}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
+    </div>
+  </div>
+
+
+  {/* =========================================================
+      CONTENEDOR INDEPENDIENTE DE LA TABLA
+  ========================================================= */}
+  <div className="relative w-full min-w-0">
+
+    <div
+      ref={scrollTablaRef}
+      className="
+        w-full
+        overflow-x-auto
+        border-y
+        border-slate-200
+        bg-white
+        shadow-sm
+        [scrollbar-width:none]
+        [&::-webkit-scrollbar]:hidden
+      "
+    >
+
+      {/* =======================================================
+          TABLA
+      ======================================================= */}
+      <table
+        ref={tablaRef}
+        className="w-max min-w-[2400px] border-collapse text-sm text-slate-700"
+      >
+
+        {/* =====================================================
+            ENCABEZADO
+        ===================================================== */}
+        <thead>
+
+          {/* ===================================================
+              PRIMER NIVEL
+          =================================================== */}
+          <tr className="bg-[#123B5D] text-center text-xs font-bold uppercase tracking-wide text-white">
+
+            {/* NÚMERO */}
+            <th
+              rowSpan={4}
+              className="w-[80px] border border-[#315A78] px-3 py-4"
+            >
+              N°
+            </th>
+
+            {/* PARÁMETRO */}
+            <th
+              rowSpan={4}
+              className="min-w-[550px] border border-[#315A78] px-4 py-4"
+            >
+              Parámetro de evaluación
+            </th>
+
+            {/* RESPONSABLE */}
+            <th className="min-w-[200px] border border-[#315A78] px-3 py-4">
+              Responsable
+            </th>
+
+            {/* CRITERIOS */}
+            <th
+              colSpan={7}
+              className="border border-[#315A78] px-3 py-4"
+            >
+              Criterios de valoración
+            </th>
+
+            {/* NIVEL DE CUMPLIMIENTO */}
+            <th
+              colSpan={2}
+              rowSpan={2}
+              className="border border-[#397783] bg-[#0F6B78] px-4 py-4 text-white"
+            >
+              Nivel de cumplimiento
+            </th>
+
+            {/* EVIDENCIAS */}
+            <th
+              colSpan={4}
+              rowSpan={2}
+              className="border border-[#315A78] bg-[#174A6B] px-4 py-4"
+            >
+              Evidencias de cumplimiento de los parámetros establecidos
+            </th>
+
+            {/* DIFUSIÓN */}
+            <th
+              colSpan={2}
+              className="border border-[#315A78] bg-[#1D5678] px-4 py-4"
+            >
+              Difusión / Comunicación
+            </th>
+
+          </tr>
+
+
+          {/* ===================================================
+              SEGUNDO NIVEL
+          =================================================== */}
+          <tr className="bg-[#DCEAF4] text-center text-xs font-semibold text-[#123B5D]">
+
+            {/* CARGO */}
+            <th
+              rowSpan={3}
+              className="min-w-[200px] border border-slate-300 px-3 py-3"
+            >
+              Cargo
+            </th>
+
+            {/* PRESENTE */}
+            <th
+              colSpan={3}
+              className="border border-slate-300 bg-[#D9EAF5] px-3 py-3"
+            >
+              Presente
+            </th>
+
+            {/* ESTÁ PRESENTE */}
+            <th
+              rowSpan={3}
+              className="min-w-[110px] border border-slate-300 bg-[#E8F2F8] px-3 py-3"
+            >
+              Está presente
+            </th>
+
+            {/* FUNCIONANDO */}
+            <th
+              colSpan={2}
+              className="border border-slate-300 bg-[#D9EAF5] px-3 py-3"
+            >
+              Funcionando
+            </th>
+
+            {/* ESTÁ FUNCIONANDO */}
+            <th
+              rowSpan={3}
+              className="min-w-[120px] border border-slate-300 bg-[#E8F2F8] px-3 py-3"
+            >
+              Está funcionando
+            </th>
+
+            {/* INTERNA */}
+            <th
+              rowSpan={3}
+              className="min-w-[120px] border border-slate-300 bg-[#DDEBF4] px-3 py-3"
+            >
+              Interna
+            </th>
+
+            {/* EXTERNA */}
+            <th
+              rowSpan={3}
+              className="min-w-[120px] border border-slate-300 bg-[#DDEBF4] px-3 py-3"
+            >
+              Externa
+            </th>
+
+          </tr>
+
+
+          {/* ===================================================
+              TERCER NIVEL
+          =================================================== */}
+          <tr className="bg-[#EFF6FA] text-center text-xs font-semibold text-slate-700">
+
+            <th
+              rowSpan={2}
+              className="min-w-[80px] border border-slate-300 px-3 py-3"
+            >
+              Existe
+            </th>
+
+            <th
+              rowSpan={2}
+              className="min-w-[85px] border border-slate-300 px-3 py-3"
+            >
+              Aprobado
+            </th>
+
+            <th
+              rowSpan={2}
+              className="min-w-[85px] border border-slate-300 px-3 py-3"
+            >
+              Difundido
+            </th>
+
+            <th
+              rowSpan={2}
+              className="min-w-[110px] border border-slate-300 px-3 py-3"
+            >
+              Implementado
+            </th>
+
+            <th
+              rowSpan={2}
+              className="min-w-[100px] border border-slate-300 px-3 py-3"
+            >
+              Actualizado
+            </th>
+
+            {/* CALIFICACIÓN */}
+            <th
+              rowSpan={2}
+              className="min-w-[110px] border border-[#A6D3D7] bg-[#D5EEF0] px-3 py-3 font-bold text-[#0F5C66]"
+            >
+              Calificación
+            </th>
+
+            {/* NIVEL */}
+            <th
+              rowSpan={2}
+              className="min-w-[120px] border border-[#A6D3D7] bg-[#D5EEF0] px-3 py-3 font-bold text-[#0F5C66]"
+            >
+              Nivel
+            </th>
+
+            {/* TIPO DOCUMENTO */}
+            <th
+              rowSpan={2}
+              className="min-w-[180px] border border-slate-300 px-3 py-3"
+            >
+              Tipo de documento
+            </th>
+
+            {/* DOCUMENTO */}
+            <th
+              rowSpan={2}
+              className="min-w-[220px] border border-slate-300 px-3 py-3"
+            >
+              Documento
+            </th>
+
+            {/* DESCRIPCIÓN */}
+            <th
+              rowSpan={2}
+              className="min-w-[300px] border border-slate-300 px-3 py-3"
+            >
+              Descripción
+            </th>
+
+            {/* FECHA */}
+            <th
+              rowSpan={2}
+              className="min-w-[190px] border border-slate-300 px-3 py-3"
+            >
+              Fecha de emisión / aprobación
+            </th>
+
+          </tr>
+
+
+          {/* ===================================================
+              CUARTO NIVEL
+          =================================================== */}
+          <tr className="bg-[#EFF6FA] text-center">
+            <th className="border border-slate-300 px-3 py-3"></th>
+          </tr>
+
+        </thead>
+
+
+        {/* =====================================================
+            CUERPO
+        ===================================================== */}
+        <tbody>
+
+          {preguntasOrdenadas.length === 0 ? (
+
+            /* =================================================
+                NO HAY REGISTROS
+            ================================================= */
+            <tr>
+
+              <td
+                colSpan={18}
+                className="border border-slate-200 bg-slate-50 px-4 py-16 text-center"
+              >
+
+                <div className="flex flex-col items-center justify-center gap-2">
+
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200">
+                    <ClipboardCheck className="h-6 w-6 text-slate-500" />
+                  </div>
+
+                  <p className="mt-2 font-semibold text-slate-700">
+                    No hay parámetros registrados
+                  </p>
+
+                  <p className="text-xs text-slate-500">
+                    Los parámetros agregados aparecerán en esta matriz.
+                  </p>
+
+                </div>
+
+              </td>
+
+            </tr>
+
+          ) : (
+
+            preguntasOrdenadas.map((pregunta, index) => (
+
+              /* =================================================
+                  FILA
+              ================================================= */
+              <tr
+                key={pregunta.numero}
+                onClick={(event) =>
+                  seleccionarPregunta(event, index)
+                }
+                className={`
+                  group cursor-pointer transition-all duration-150
+                  ${
+                    selectedIndex === index
+                      ? "bg-blue-50 shadow-[inset_4px_0_0_#2563eb]"
+                      : index % 2 === 0
+                        ? "bg-white hover:bg-sky-50/70"
+                        : "bg-slate-50/50 hover:bg-sky-50/70"
+                  }
+                `}
+              >
+
+                {/* ===============================================
+                    NÚMERO
+                =============================================== */}
+                <td className="border border-slate-200 px-3 py-4 text-center">
+
+                  <span
+                    className={`
+                      inline-flex min-w-[40px]
+                      items-center justify-center
+                      rounded-lg px-2.5 py-1.5
+                      text-xs font-bold
+                      ${
+                        selectedIndex === index
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-700"
+                      }
+                    `}
+                  >
+                    {pregunta.numero}
+                  </span>
+
+                </td>
+
+
+                {/* ===============================================
+                    PARÁMETRO / PREGUNTA
+                =============================================== */}
+                <td className="border border-slate-200 px-5 py-4 align-top">
+
+                  <p className="max-w-[550px] whitespace-normal leading-6 text-slate-700">
+                    {pregunta.texto}
+                  </p>
+
+                </td>
+
+
+                {/* ===============================================
+                    RESPONSABLE
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4 align-top">
+
+                  {pregunta.cargo ? (
+
+                    <span className="inline-flex rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                      {pregunta.cargo}
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      Sin asignar
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* EXISTE */}
+                <td className="border border-slate-200 px-3 py-4 text-center font-semibold text-slate-700">
+                  {pregunta.existe}
+                </td>
+
+
+                {/* APROBADO */}
+                <td className="border border-slate-200 px-3 py-4 text-center font-semibold text-slate-700">
+                  {pregunta.aprobado}
+                </td>
+
+
+                {/* DIFUNDIDO */}
+                <td className="border border-slate-200 px-3 py-4 text-center font-semibold text-slate-700">
+                  {pregunta.difundido}
+                </td>
+
+
+                {/* ESTÁ PRESENTE */}
+                <td className="border border-slate-200 px-3 py-4 text-center">
+                  {badgeSiNo(pregunta.estaPresente)}
+                </td>
+
+
+                {/* IMPLEMENTADO */}
+                <td className="border border-slate-200 px-3 py-4 text-center font-semibold text-slate-700">
+                  {pregunta.implementado}
+                </td>
+
+
+                {/* ACTUALIZADO */}
+                <td className="border border-slate-200 px-3 py-4 text-center font-semibold text-slate-700">
+                  {pregunta.actualizado}
+                </td>
+
+
+                {/* ESTÁ FUNCIONANDO */}
+                <td className="border border-slate-200 px-3 py-4 text-center">
+                  {badgeSiNo(pregunta.estaFuncionando)}
+                </td>
+
+
+                {/* ===============================================
+                    CALIFICACIÓN
+                =============================================== */}
+                <td className="border border-slate-200 bg-cyan-50/40 px-3 py-4 text-center">
+
+                  <span className="inline-flex min-w-[48px] items-center justify-center rounded-lg bg-[#E0F2F4] px-3 py-1.5 font-bold text-[#0F6674]">
+                    {pregunta.calificacion}
+                  </span>
+
+                </td>
+
+
+                {/* ===============================================
+                    NIVEL
+                =============================================== */}
+                <td className="border border-slate-200 bg-cyan-50/30 px-3 py-4 text-center">
+                  {badgeNivel(pregunta.nivel)}
+                </td>
+
+
+                {/* ===============================================
+                    TIPO DE DOCUMENTO
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4">
+
+                  {pregunta.tipoDocumento ? (
+
+                    <span className="font-medium text-slate-700">
+                      {pregunta.tipoDocumento}
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      Sin especificar
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* ===============================================
+                    DOCUMENTO
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4 text-center align-middle">
+
+                  {pregunta.documentId && pregunta.pdfUrl ? (
+
+                    <div className="flex flex-col items-center justify-center gap-3">
+
+                      {/* Nombre */}
+                      <span
+                        className="max-w-[200px] truncate text-xs font-semibold text-slate-700"
+                        title={pregunta.nombreDocumento}
+                      >
+                        {pregunta.nombreDocumento || "Documento"}
+                      </span>
+
+
+                      {/* Acciones */}
+                      <div className="flex items-center justify-center gap-2">
+
+                        {/* VER */}
+                        <a
+                          href={pregunta.pdfUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(event) =>
+                            event.stopPropagation()
+                          }
+                          title="Ver documento"
+                          className="
+                            inline-flex h-9 w-9
+                            items-center justify-center
+                            rounded-xl
+                            border border-blue-200
+                            bg-blue-50
+                            text-blue-600
+                            shadow-sm
+                            transition-all duration-200
+                            hover:-translate-y-0.5
+                            hover:border-blue-300
+                            hover:bg-blue-100
+                            hover:shadow-md
+                          "
+                        >
+                          <Eye className="h-4 w-4" />
+                        </a>
+
+
+                        {/* DESCARGAR */}
+                        <a
+                          href={pregunta.pdfUrl}
+                          download
+                          onClick={(event) =>
+                            event.stopPropagation()
+                          }
+                          title="Descargar documento"
+                          className="
+                            inline-flex h-9 w-9
+                            items-center justify-center
+                            rounded-xl
+                            border border-emerald-200
+                            bg-emerald-50
+                            text-emerald-600
+                            shadow-sm
+                            transition-all duration-200
+                            hover:-translate-y-0.5
+                            hover:border-emerald-300
+                            hover:bg-emerald-100
+                            hover:shadow-md
+                          "
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+
+                      </div>
+
+                    </div>
+
+                  ) : (
+
+                    /* SIN DOCUMENTO */
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+                        <Download className="h-4 w-4 text-slate-400" />
+                      </div>
+
+                      <span className="text-xs text-slate-400">
+                        Sin documento
+                      </span>
+
+                    </div>
+
+                  )}
+
+                </td>
+
+
+                {/* ===============================================
+                    DESCRIPCIÓN
+                =============================================== */}
+                <td className="border border-slate-200 px-5 py-4 align-top">
+
+                  {pregunta.descripcion ? (
+
+                    <p className="max-w-[300px] whitespace-normal leading-6 text-slate-600">
+                      {pregunta.descripcion}
+                    </p>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      Sin descripción
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* ===============================================
+                    FECHA
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4 text-center">
+
+                  {pregunta.fechaEmision ? (
+
+                    <span className="inline-flex whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
+                      {pregunta.fechaEmision}
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      Sin fecha
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* ===============================================
+                    INTERNA
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4 text-center">
+
+                  {pregunta.interna ? (
+
+                    <span className="whitespace-normal font-medium text-slate-700">
+                      {pregunta.interna}
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      -
+                    </span>
+
+                  )}
+
+                </td>
+
+
+                {/* ===============================================
+                    EXTERNA
+                =============================================== */}
+                <td className="border border-slate-200 px-4 py-4 text-center">
+
+                  {pregunta.externa ? (
+
+                    <span className="whitespace-normal font-medium text-slate-700">
+                      {pregunta.externa}
+                    </span>
+
+                  ) : (
+
+                    <span className="text-xs text-slate-400">
+                      -
+                    </span>
+
+                  )}
+
+                </td>
+
+              </tr>
+
+            ))
+
+          )}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+
+  {/* =========================================================
+      MENÚ FLOTANTE EDITAR / ELIMINAR
+      MISMA LÓGICA QUE YA TENÍAS
+  ========================================================= */}
+  {typeof document !== "undefined" &&
+    selectedIndex !== null &&
+    menuPosicion &&
+    (puedeEditarPregunta || puedeEliminarPregunta) &&
+    createPortal(
+
+      <div
+        className={`fixed z-[9999] ${
+          menuPosicion.arriba
+            ? "-translate-y-full"
+            : ""
+        }`}
+        style={{
+          top: `${menuPosicion.top}px`,
+          left: `${menuPosicion.left}px`,
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+
+        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-slate-200">
+
+          {/* EDITAR */}
+          {puedeEditarPregunta && (
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                validarYEditar();
+                setMenuPosicion(null);
+              }}
+              disabled={cargandoPermisos}
+              className="h-9 rounded-lg px-3 text-amber-700 hover:bg-amber-50"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+
+          )}
+
+
+          {/* ELIMINAR */}
+          {puedeEliminarPregunta && (
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                validarYEliminar();
+                setMenuPosicion(null);
+              }}
+              disabled={cargandoPermisos}
+              className="h-9 rounded-lg px-3 text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar
+            </Button>
+
+          )}
+
+        </div>
+
+      </div>,
+
+      document.body
+
+    )}
+
+
+  {/* =========================================================
+      SCROLL HORIZONTAL FIJO
+      MISMA LÓGICA QUE YA TENÍAS
+  ========================================================= */}
+  <div
+  ref={scrollFijoRef}
+  className="
+    fixed
+    bottom-0
+    left-[var(--sidebar-width)]
+    right-0
+    z-50
+    h-5
+    overflow-x-auto
+    border-t
+    border-slate-300
+    bg-white
+    shadow-md
+  "
+>
+  <div
+    style={{
+      width: `${anchoTabla}px`,
+      minWidth: `${anchoTabla}px`,
+    }}
+    className="h-1"
+  />
+</div>
+
+
+{/* =========================================================
+    FIN DEL CONTENEDOR PRINCIPAL
+========================================================= */}
+</div>
+
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
@@ -1178,6 +2457,144 @@ actualizadas = actualizadas.map((p) => ({
 
         </div>
 
+          {/* ================= ARCHIVO DEL DOCUMENTO ================= */}
+        
+        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+        
+          <div className="mb-4">
+            <h4 className="text-sm font-semibold text-slate-800">
+              Documento de evidencia
+            </h4>
+        
+            <p className="mt-1 text-xs text-slate-500">
+              El documento quedará vinculado directamente a esta pregunta.
+            </p>
+          </div>
+        
+          {/* DOCUMENTO EXISTENTE */}
+          {preguntaEditando?.documentId &&
+            preguntaEditando?.pdfUrl &&
+            !reemplazarDocumento && (
+              <div className="mb-4 rounded-xl border border-emerald-200 bg-white p-4">
+        
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Documento actualmente vinculado
+                </p>
+        
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        
+                  <div>
+                    <p className="font-semibold text-slate-800">
+                      {preguntaEditando.nombreDocumento ||
+                        "Documento"}
+                    </p>
+        
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Documento vinculado correctamente
+                    </p>
+                  </div>
+        
+                  <div className="flex items-center gap-2">
+        
+                    <a
+                      href={preguntaEditando.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      Ver documento
+                    </a>
+        
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setReemplazarDocumento(true);
+                        setArchivoDocumento(null);
+                      }}
+                      className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                    >
+                      Reemplazar
+                    </Button>
+        
+                  </div>
+                </div>
+              </div>
+            )}
+        
+          {/* NUEVO DOCUMENTO / REEMPLAZO */}
+          {(!preguntaEditando?.documentId ||
+            reemplazarDocumento) && (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Nombre del documento
+                </label>
+        
+                <input
+                  type="text"
+                  value={nombreDocumento}
+                  onChange={(e) =>
+                    setNombreDocumento(e.target.value)
+                  }
+                  placeholder="Ej.: Manual de procedimientos"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+        
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Archivo
+                </label>
+        
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={(e) =>
+                    setArchivoDocumento(
+                      e.target.files?.[0] ?? null
+                    )
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                />
+        
+                {archivoDocumento && (
+                  <p className="mt-2 text-xs text-slate-600">
+                    Archivo seleccionado:{" "}
+                    <span className="font-semibold">
+                      {archivoDocumento.name}
+                    </span>
+                  </p>
+                )}
+              </div>
+        
+              {preguntaEditando?.documentId &&
+                reemplazarDocumento && (
+                  <div className="lg:col-span-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setReemplazarDocumento(false);
+                        setArchivoDocumento(null);
+        
+                        setNombreDocumento(
+                          preguntaEditando.nombreDocumento || ""
+                        );
+                      }}
+                      className="text-slate-600"
+                    >
+                      Cancelar reemplazo
+                    </Button>
+                  </div>
+                )}
+        
+            </div>
+          )}
+        
+        </div>
+
       </div>
 
     </div>
@@ -1185,16 +2602,22 @@ actualizadas = actualizadas.map((p) => ({
   </div>
 )}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button type="button" onClick={guardarModal}>
-              Guardar
-            </Button>
+           <Button
+  type="button"
+  variant="outline"
+  onClick={() => setOpen(false)}
+  disabled={loading}
+>
+  Cancelar
+</Button>
+
+ <Button
+  type="button"
+  onClick={guardarModal}
+  disabled={loading}
+>
+  {loading ? "Guardando..." : "Guardar"}
+</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

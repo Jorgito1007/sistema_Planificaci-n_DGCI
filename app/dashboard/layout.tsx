@@ -1,19 +1,23 @@
 import React from "react";
-import { auth } from "@/auth";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import jwt from "jsonwebtoken";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
+
 import {
   SidebarProvider,
   SidebarInset,
 } from "@/components/ui/sidebar";
 
 import { NotificationProvider } from "@/context/NotificationContext";
-import { getUserByEmail } from "@/lib/current-user";
+
+import { getCurrentUser } from "@/lib/current-user";
+
 import AvisoSistemaModal from "@/components/AvisoSistemaModal";
+
+// ============================================================
+// TIPO USUARIO PARA SIDEBAR / TOPBAR
+// ============================================================
 
 type SidebarUser = {
   email: string;
@@ -21,69 +25,161 @@ type SidebarUser = {
   role: string;
 };
 
+// ============================================================
+// DASHBOARD LAYOUT
+// ============================================================
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let user: SidebarUser | null = null;
+  // ==========================================================
+  // 1. OBTENER USUARIO ACTUAL
+  // ==========================================================
 
-  const session = await auth();
+  /*
+   * getCurrentUser() ya se encarga de:
+   *
+   * - auth_token
+   * - Auth.js / Google
+   * - verificar JWT
+   * - consultar Usuarios_Dgci
+   * - comprobar IsActive = 1
+   * - obtener rol actualizado
+   * - obtener cargo actualizado
+   * - obtener MustChangePassword
+   */
 
-  if (session?.user?.email?.endsWith("@uncsm.edu.ni")) {
-    const dbUser = await getUserByEmail(session.user.email);
+  const currentUser =
+    await getCurrentUser();
 
-    if (!dbUser) {
-      redirect("/auth/login?error=Usuario no autorizado");
-    }
+  // ==========================================================
+  // 2. USUARIO NO AUTORIZADO / BLOQUEADO
+  // ==========================================================
 
-    user = {
-      email: dbUser.email,
-      full_name: dbUser.full_name,
-      role: dbUser.role,
-    };
+  /*
+   * Si el administrador bloqueó al usuario:
+   *
+   * Usuarios_Dgci.IsActive = 0
+   *
+   * getCurrentUser() devolverá null.
+   */
+
+  if (!currentUser) {
+    redirect(
+      "/auth/login?error=Usuario no autorizado o bloqueado"
+    );
   }
 
-  if (!user) {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("auth_token")?.value;
+  // ==========================================================
+  // 3. CAMBIO OBLIGATORIO DE CONTRASEÑA
+  // ==========================================================
 
-    if (!token) redirect("/auth/login");
+  /*
+   * Un usuario con contraseña temporal NO puede
+   * acceder al dashboard aunque escriba directamente:
+   *
+   * /dashboard
+   *
+   * Primero deberá cambiar su contraseña.
+   */
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) redirect("/auth/login?error=Falta JWT_SECRET");
-
-    try {
-      const payload = jwt.verify(token, secret) as any;
-
-      user = {
-        email: payload.email,
-        full_name: payload.full_name ?? payload.fullName ?? "Usuario",
-        role: payload.role,
-      };
-    } catch {
-      redirect("/auth/login");
-    }
+  if (
+    currentUser.mustChangePassword
+  ) {
+    redirect(
+      "/auth/cambiar-contrasena"
+    );
   }
 
- return (
-  <NotificationProvider>
-    <SidebarProvider
-      defaultOpen={true}
-      className="[--sidebar-width:20rem] [--sidebar-width-icon:4rem]"
-    >
-      <AppSidebar user={user} />
+  // ==========================================================
+  // 4. DATOS PARA SIDEBAR Y TOPBAR
+  // ==========================================================
 
-      <SidebarInset className="min-w-0 bg-slate-50 overflow-hidden">
-        <Topbar user={user} />
-<AvisoSistemaModal />
-        <main className="h-[calc(100vh-3.5rem)] overflow-auto p-4">
-          <div className="min-w-0">
-            {children}
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
-  </NotificationProvider>
-);
+  const user: SidebarUser = {
+    email:
+      currentUser.email,
+
+    full_name:
+      currentUser.full_name,
+
+    /*
+     * Conservamos RoleName porque tu interfaz actual
+     * ya utiliza user.role.
+     */
+    role:
+      currentUser.role,
+  };
+
+  // ==========================================================
+  // 5. RENDERIZAR DASHBOARD
+  // ==========================================================
+
+  return (
+    <NotificationProvider>
+
+      <SidebarProvider
+        defaultOpen={true}
+        className="
+          [--sidebar-width:20rem]
+          [--sidebar-width-icon:4rem]
+        "
+      >
+
+        {/* SIDEBAR */}
+
+        <AppSidebar
+          user={user}
+        />
+
+
+        {/* CONTENIDO */}
+
+        <SidebarInset
+          className="
+            min-w-0
+            bg-slate-50
+          "
+        >
+
+          {/* TOPBAR */}
+
+          <Topbar
+            user={user}
+          />
+
+
+          {/* AVISOS */}
+
+          <AvisoSistemaModal />
+
+
+          {/* CONTENIDO DE LAS PÁGINAS */}
+
+          <main
+            className="
+              h-[calc(100vh-3.5rem)]
+              overflow-auto
+              p-4
+            "
+          >
+
+            <div
+              className="
+                w-full
+                min-w-0
+              "
+            >
+              {children}
+            </div>
+
+          </main>
+
+        </SidebarInset>
+
+      </SidebarProvider>
+
+    </NotificationProvider>
+  );
 }

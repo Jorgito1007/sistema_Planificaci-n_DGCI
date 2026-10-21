@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState,useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -163,6 +163,11 @@ function recalcularPregunta(p: PreguntaDetalleForm): PreguntaDetalleForm {
 
 export default function EvaluacionRiesgosPage() {
   const SUBMODULE_KEY = "sa_ERiesgos";
+
+  const tablaRef = useRef<HTMLTableElement>(null);
+const scrollTablaRef = useRef<HTMLDivElement>(null);
+const scrollFijoRef = useRef<HTMLDivElement>(null);
+const [anchoTabla, setAnchoTabla] = useState(2200);
 
   const [cargos, setCargos] = useState<Cargo[]>([]);
 
@@ -409,242 +414,1184 @@ useEffect(() => {
     return [...registros].sort((a, b) => a.principioId - b.principioId);
   }, [registros]);
 
+//SCROLL
+useEffect(() => {
+  const tabla = scrollTablaRef.current;
+  const fijo = scrollFijoRef.current;
+
+  if (!tabla || !fijo) return;
+
+  const moverDesdeTabla = () => {
+    fijo.scrollLeft = tabla.scrollLeft;
+  };
+
+  const moverDesdeFijo = () => {
+    tabla.scrollLeft = fijo.scrollLeft;
+  };
+
+  tabla.addEventListener("scroll", moverDesdeTabla);
+  fijo.addEventListener("scroll", moverDesdeFijo);
+
+  return () => {
+    tabla.removeEventListener("scroll", moverDesdeTabla);
+    fijo.removeEventListener("scroll", moverDesdeFijo);
+  };
+}, []);
+
+//ancho scroll
+useEffect(() => {
+  const actualizarAncho = () => {
+    if (tablaRef.current) {
+      setAnchoTabla(tablaRef.current.scrollWidth);
+    }
+  };
+
+  actualizarAncho();
+
+  window.addEventListener("resize", actualizarAncho);
+
+  return () => {
+    window.removeEventListener("resize", actualizarAncho);
+  };
+}, [registrosOrdenados]);
+
   return (
     <div className="space-y-6 p-6">
-      <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-800">Componente 2</h1>
-        <h2 className="mt-2 text-lg font-semibold text-slate-700">
-          EVALUACIÓN DE RIESGOS
-        </h2>
-        <p className="mt-4 text-sm leading-6 text-slate-600 text-justify">
-          Se centra en identificar y analizar los riesgos considerando su criticidad y tolerancia para la consecución de los objetivos de la Entidad, de tal forma, que se disponga de una base para dar respuesta a los mismos a través de una adecuada administración.
-        </p>
+     
+  {/* ============================================================
+    ENCABEZADO DEL COMPONENTE
+============================================================ */}
+
+<div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+  {/* ==========================================================
+      ENCABEZADO
+  ========================================================== */}
+
+  <div className="relative overflow-hidden border-b border-blue-100 bg-gradient-to-r from-[#f1f7ff] via-[#eef8ff] to-[#e8f9fb] px-5 py-5">
+
+    {/* Decoración derecha */}
+    <div className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full bg-blue-100/60" />
+
+    <div className="pointer-events-none absolute right-16 -bottom-12 h-20 w-20 rounded-full bg-cyan-100/30" />
+
+
+    <div className="relative flex items-center gap-4">
+
+      {/* ========================================================
+          NÚMERO DEL COMPONENTE
+      ======================================================== */}
+
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0b4da2] text-base font-black text-white shadow-md shadow-blue-900/20">
+        2
       </div>
 
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-  {PRINCIPIOS.map((principio) => {
 
-    const habilitado = puedeUsarPrincipio(Number(principio.id));
+      {/* ========================================================
+          TÍTULO
+      ======================================================== */}
 
-    return (
-      <button
-        key={principio.id}
-        type="button"
-        onClick={() => {
-          if (!habilitado) return;
+      <div>
 
-          abrirModal(principio);
-        }}
-        disabled={!habilitado}
-        className={`rounded-2xl p-5 text-left text-white shadow-md transition
-          ${
-            habilitado
-              ? `${principio.color} hover:scale-[1.02] cursor-pointer`
-              : "bg-gray-400 cursor-not-allowed opacity-60"
-          }
-        `}
-      >
-        <h3 className="text-lg font-bold">
-          {principio.titulo}
-        </h3>
+        <h1 className="mt-1 text-lg font-bold text-[#082f5b]">
+          Evaluación de Riesgos
+        </h1>
 
-        <p className="mt-2 text-sm opacity-90">
-          {habilitado
-            ? "Registrar o editar contenido"
-            : "Sin permisos"}
-        </p>
-      </button>
-    );
-  })}
+      </div>
+
+    </div>
+
+  </div>
+
+
+  {/* ==========================================================
+      DESCRIPCIÓN
+  ========================================================== */}
+
+  <div className="px-5 py-6">
+
+    <div className="flex gap-4">
+
+      {/* Línea lateral */}
+      <div className="w-1 shrink-0 rounded-full bg-gradient-to-b from-[#0b4da2] to-[#1596aa]" />
+
+
+      {/* Texto */}
+      <p className="text-justify text-sm leading-7 text-slate-600">
+
+     Se centra en identificar y analizar los riesgos considerando su criticidad y tolerancia para la consecución de los objetivos de la Entidad, de tal forma, que se disponga de una base 
+   para dar respuesta a los mismos a través de una adecuada administración.
+
+      </p>
+
+    </div>
+
+  </div>
+
 </div>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="border-b bg-slate-100 px-4 py-3">
-          <h3 className="text-base font-semibold text-slate-800">
-            Matriz de Evaluación - Sistema de Control Interno
-          </h3>
+    {/* ============================================================
+    PRINCIPIOS DEL COMPONENTE
+============================================================ */}
+
+<div className="mt-5">
+
+
+
+  {/* ==========================================================
+      BOTONES
+  ========================================================== */}
+
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+    {PRINCIPIOS.map((principio, index) => {
+
+      const habilitado =
+        puedeUsarPrincipio(Number(principio.id));
+
+
+      /*
+        Colores visuales por principio.
+
+        Ya no dependemos de principio.color para el diseño,
+        pero NO modificamos ninguna función ni la lógica.
+      */
+
+      const estilos = [
+        {
+          fondo: "bg-blue-50/60",
+          borde: "border-blue-200",
+          icono: "bg-blue-600",
+          numero: "text-blue-600",
+          titulo: "text-blue-900",
+          hover: "hover:border-blue-300 hover:shadow-blue-100",
+          flecha: "group-hover:bg-blue-600 group-hover:text-white",
+        },
+
+        {
+          fondo: "bg-emerald-50/60",
+          borde: "border-emerald-200",
+          icono: "bg-emerald-600",
+          numero: "text-emerald-600",
+          titulo: "text-emerald-900",
+          hover: "hover:border-emerald-300 hover:shadow-emerald-100",
+          flecha: "group-hover:bg-emerald-600 group-hover:text-white",
+        },
+
+        {
+          fondo: "bg-amber-50/60",
+          borde: "border-amber-200",
+          icono: "bg-amber-500",
+          numero: "text-amber-600",
+          titulo: "text-amber-900",
+          hover: "hover:border-amber-300 hover:shadow-amber-100",
+          flecha: "group-hover:bg-amber-500 group-hover:text-white",
+        },
+
+        {
+          fondo: "bg-violet-50/60",
+          borde: "border-violet-200",
+          icono: "bg-violet-600",
+          numero: "text-violet-600",
+          titulo: "text-violet-900",
+          hover: "hover:border-violet-300 hover:shadow-violet-100",
+          flecha: "group-hover:bg-violet-600 group-hover:text-white",
+        },
+
+        {
+          fondo: "bg-rose-50/60",
+          borde: "border-rose-200",
+          icono: "bg-rose-600",
+          numero: "text-rose-600",
+          titulo: "text-rose-900",
+          hover: "hover:border-rose-300 hover:shadow-rose-100",
+          flecha: "group-hover:bg-rose-600 group-hover:text-white",
+        },
+      ];
+
+
+      const estilo =
+        estilos[index % estilos.length];
+
+
+      return (
+
+        <button
+          key={principio.id}
+          type="button"
+
+          onClick={() => {
+
+            if (!habilitado) return;
+
+            abrirModal(principio);
+
+          }}
+
+          disabled={!habilitado}
+
+          className={`
+            group relative overflow-hidden rounded-2xl border
+            p-4 text-left transition-all duration-300
+
+            ${
+              habilitado
+                ? `
+                  ${estilo.fondo}
+                  ${estilo.borde}
+                  ${estilo.hover}
+                  cursor-pointer
+                  hover:-translate-y-0.5
+                  hover:bg-white
+                  hover:shadow-lg
+                `
+                : `
+                  cursor-not-allowed
+                  border-slate-200
+                  bg-slate-50
+                  opacity-60
+                `
+            }
+          `}
+        >
+
+          {/* ====================================================
+              DECORACIÓN
+          ==================================================== */}
+
+          {habilitado && (
+
+            <div
+              className={`
+                pointer-events-none
+                absolute -right-8 -top-8
+                h-20 w-20
+                rounded-full
+                opacity-[0.08]
+                ${estilo.icono}
+                transition-transform
+                duration-500
+                group-hover:scale-125
+              `}
+            />
+
+          )}
+
+
+          {/* ====================================================
+              CONTENIDO
+          ==================================================== */}
+
+          <div className="relative flex items-center gap-3">
+
+
+            {/* ==================================================
+                NÚMERO
+            ================================================== */}
+
+            <div
+              className={`
+                flex h-11 w-11
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                text-sm
+                font-black
+                text-white
+                shadow-sm
+
+                ${
+                  habilitado
+                    ? estilo.icono
+                    : "bg-slate-400"
+                }
+              `}
+            >
+
+              {index + 1}
+
+            </div>
+
+
+
+            {/* ==================================================
+                INFORMACIÓN
+            ================================================== */}
+
+            <div className="min-w-0 flex-1">
+
+
+              <div className="flex items-center justify-between gap-3">
+
+
+                {/* TÍTULO */}
+
+                <h3
+                  className={`
+                    text-sm font-bold
+
+                    ${
+                      habilitado
+                        ? estilo.titulo
+                        : "text-slate-500"
+                    }
+                  `}
+                >
+
+                  {principio.titulo}
+
+                </h3>
+
+
+
+                {/* =================================================
+                    FLECHA
+                ================================================= */}
+
+                {habilitado && (
+
+                  <div
+                    className={`
+                      flex h-7 w-7
+                      shrink-0
+                      items-center
+                      justify-center
+                      rounded-full
+                      bg-white
+                      text-slate-400
+                      shadow-sm
+                      ring-1
+                      ring-slate-100
+                      transition-all
+                      duration-300
+
+                      ${estilo.flecha}
+                    `}
+                  >
+
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 18l6-6-6-6"
+                      />
+                    </svg>
+
+                  </div>
+
+                )}
+
+              </div>
+
+
+
+              {/* =================================================
+                  ESTADO
+              ================================================= */}
+
+              <div className="mt-1.5 flex items-center gap-2">
+
+                {habilitado ? (
+
+                  <>
+                    <span
+                      className={`
+                        h-1.5 w-1.5
+                        rounded-full
+                        ${estilo.icono}
+                      `}
+                    />
+
+                    <span className="text-[10px] font-medium text-slate-500">
+                      Registrar o editar contenido
+                    </span>
+                  </>
+
+                ) : (
+
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+
+                    <span className="text-[10px] font-medium text-slate-400">
+                      Sin permisos
+                    </span>
+                  </>
+
+                )}
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </button>
+
+      );
+
+    })}
+
+  </div>
+
+</div>
+      
+{/* ============================================================
+    MATRIZ DE EVALUACIÓN - ENTORNO DE CONTROL
+============================================================ */}
+
+<div className="w-full min-w-0">
+
+  <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+
+    {/* ==========================================================
+        ENCABEZADO DE LA MATRIZ
+    ========================================================== */}
+
+    <div className="relative overflow-hidden border-b border-blue-100 bg-gradient-to-r from-[#0b4da2] via-[#1767a8] to-[#1596aa] px-5 py-4">
+
+      {/* Decoraciones */}
+
+      <div className="pointer-events-none absolute -right-8 -top-12 h-28 w-28 rounded-full bg-white/10" />
+
+      <div className="pointer-events-none absolute right-16 top-8 h-16 w-16 rounded-full bg-white/5" />
+
+
+      <div className="relative flex items-center gap-3">
+
+        {/* Icono visual */}
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/15 shadow-sm">
+
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="h-5 w-5 text-white"
+          >
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-[2200px] w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-[#d9e7f5] text-center font-semibold">
-                <th rowSpan={4} className="border px-2 py-2 w-[60px]"></th>
-                <th rowSpan={4} className="border px-2 py-2 min-w-[500px]"></th>
 
-                <th className="border px-2 py-2 min-w-[180px]">RESPONSABLE</th>
+        {/* Título */}
 
-                <th colSpan={7} className="border px-2 py-2">
-                  CRITERIOS DE VALORACIÓN
-                </th>
+        <div>
 
-                <th colSpan={2} rowSpan={2} className="border px-2 py-2 bg-[#bcd4ec]">
-                  Nivel de cumplimiento del principio
-                </th>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-100">
+            Componente 2
+          </p>
 
-                <th colSpan={3} rowSpan={2} className="border px-2 py-2">
-                  EVIDENCIAS DE CUMPLIMIENTO DE LOS PUNTOS DE ENFOQUE
-                </th>
+          <h3 className="mt-0.5 text-base font-bold text-white">
+            Matriz de Evaluación
+          </h3>
 
-                <th colSpan={2} className="border px-2 py-2">
-                  DIFUSIÓN / COMUNICACIÓN
-                </th>
-              </tr>
+        </div>
 
-              <tr className="bg-[#eef4fb] text-center">
-                <th
-                  rowSpan={3}
-                  className="border px-2 py-2 min-w-[180px] text-center align-middle"
+      </div>
+
+    </div>
+
+
+    {/* ==========================================================
+        CONTENEDOR DE TABLA
+    ========================================================== */}
+
+    <div className="relative w-full min-w-0">
+
+
+      {/* ========================================================
+          SCROLL PRINCIPAL
+      ======================================================== */}
+
+      <div
+        ref={scrollTablaRef}
+        className="w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+
+        <table
+          ref={tablaRef}
+          className="min-w-[2200px] border-collapse text-[12px] text-slate-700"
+        >
+
+
+          {/* ====================================================
+              ENCABEZADO DE TABLA
+          ==================================================== */}
+
+          <thead>
+
+
+            {/* ==================================================
+                NIVEL 1
+            ================================================== */}
+
+            <tr className="bg-[#0e456f] text-center font-bold uppercase tracking-wide text-white">
+
+              <th
+                rowSpan={4}
+                className="w-[70px] border border-[#326486] px-3 py-3"
+              >
+                N°
+              </th>
+
+
+              <th
+                rowSpan={4}
+                className="min-w-[500px] border border-[#326486] px-4 py-3 text-left"
+              >
+                Punto de enfoque
+              </th>
+
+
+              <th className="min-w-[180px] border border-[#326486] px-3 py-3">
+                Responsable
+              </th>
+
+
+              <th
+                colSpan={7}
+                className="border border-[#326486] bg-[#15577f] px-3 py-3"
+              >
+                Criterios de valoración
+              </th>
+
+
+              <th
+                colSpan={2}
+                rowSpan={2}
+                className="border border-[#326486] bg-[#117985] px-3 py-3"
+              >
+                Nivel de cumplimiento
+                <span className="mt-1 block text-[9px] font-medium normal-case tracking-normal text-cyan-100">
+                  del principio
+                </span>
+              </th>
+
+
+              <th
+                colSpan={3}
+                rowSpan={2}
+                className="border border-[#326486] bg-[#174e70] px-3 py-3"
+              >
+                Evidencias de cumplimiento
+                <span className="mt-1 block text-[9px] font-medium normal-case tracking-normal text-blue-100">
+                  de los puntos de enfoque
+                </span>
+              </th>
+
+
+              <th
+                colSpan={2}
+                className="border border-[#326486] bg-[#15577f] px-3 py-3"
+              >
+                Difusión / Comunicación
+              </th>
+
+            </tr>
+
+
+
+            {/* ==================================================
+                NIVEL 2
+            ================================================== */}
+
+            <tr className="bg-[#e9f3f9] text-center font-bold text-[#123d5c]">
+
+              <th
+                rowSpan={3}
+                className="min-w-[180px] border border-slate-300 px-3 py-3 align-middle"
+              >
+                Cargo
+              </th>
+
+
+              <th
+                colSpan={3}
+                className="border border-slate-300 bg-[#e7f4f8] px-3 py-2.5 text-[#0e6074]"
+              >
+                Presente
+              </th>
+
+
+              <th
+                rowSpan={3}
+                className="min-w-[100px] border border-slate-300 px-3 py-3"
+              >
+                Está
+                <span className="block">presente</span>
+              </th>
+
+
+              <th
+                colSpan={2}
+                className="border border-slate-300 bg-[#edf7f3] px-3 py-2.5 text-emerald-800"
+              >
+                Funcionando
+              </th>
+
+
+              <th
+                rowSpan={3}
+                className="min-w-[105px] border border-slate-300 px-3 py-3"
+              >
+                Está
+                <span className="block">funcionando</span>
+              </th>
+
+
+              <th
+                rowSpan={3}
+                className="min-w-[110px] border border-slate-300 bg-[#eef6fb] px-3 py-3"
+              >
+                Interna
+              </th>
+
+
+              <th
+                rowSpan={3}
+                className="min-w-[110px] border border-slate-300 bg-[#eef6fb] px-3 py-3"
+              >
+                Externa
+              </th>
+
+            </tr>
+
+
+
+            {/* ==================================================
+                NIVEL 3
+            ================================================== */}
+
+            <tr className="bg-[#f5f9fc] text-center font-semibold text-slate-700">
+
+              <th
+                rowSpan={2}
+                className="min-w-[75px] border border-slate-300 px-2 py-3"
+              >
+                Existe
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[80px] border border-slate-300 px-2 py-3"
+              >
+                Aprobado
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[80px] border border-slate-300 px-2 py-3"
+              >
+                Difundido
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[95px] border border-slate-300 px-2 py-3"
+              >
+                Implementado
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[90px] border border-slate-300 px-2 py-3"
+              >
+                Actualizado
+              </th>
+
+
+              {/* CALIFICACIÓN */}
+
+              <th
+                rowSpan={2}
+                className="min-w-[100px] border border-cyan-200 bg-[#dff3f6] px-2 py-3 font-bold text-[#087183]"
+              >
+                Calificación
+              </th>
+
+
+              {/* NIVEL */}
+
+              <th
+                rowSpan={2}
+                className="min-w-[110px] border border-cyan-200 bg-[#dff3f6] px-2 py-3 font-bold text-[#087183]"
+              >
+                Nivel
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[180px] border border-slate-300 bg-[#f1f6fa] px-3 py-3"
+              >
+                Tipo de documento
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[280px] border border-slate-300 bg-[#f1f6fa] px-3 py-3"
+              >
+                Descripción
+              </th>
+
+
+              <th
+                rowSpan={2}
+                className="min-w-[180px] border border-slate-300 bg-[#f1f6fa] px-3 py-3"
+              >
+                Fecha de emisión /
+                <span className="block">
+                  aprobación
+                </span>
+              </th>
+
+            </tr>
+
+
+            {/* ==================================================
+                NIVEL 4
+            ================================================== */}
+
+            <tr className="bg-[#f5f9fc] text-center">
+            </tr>
+
+          </thead>
+
+
+
+          {/* ====================================================
+              CUERPO
+          ==================================================== */}
+
+          <tbody>
+
+            {registrosOrdenados.length === 0 ? (
+
+              /* ==================================================
+                  SIN REGISTROS
+              ================================================== */
+
+              <tr>
+
+                <td
+                  colSpan={17}
+                  className="border border-slate-200 bg-slate-50 px-4 py-12 text-center"
                 >
-                  CARGO
-                </th>
 
-                <th colSpan={3} className="border px-2 py-2">
-                  Presente
-                </th>
+                  <div className="flex flex-col items-center justify-center">
 
-                <th rowSpan={3} className="border px-2 py-2 min-w-[90px]">
-                  Está presente
-                </th>
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50">
 
-                <th colSpan={2} className="border px-2 py-2">
-                  Funcionando
-                </th>
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-6 w-6 text-blue-500"
+                      >
+                        <path d="M9 11l3 3L22 4" />
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
 
-                <th rowSpan={3} className="border px-2 py-2 min-w-[95px]">
-                  Está funcionando
-                </th>
+                    </div>
 
-                <th rowSpan={3} className="border px-2 py-2 min-w-[100px]">
-                  INTERNA
-                </th>
 
-                <th rowSpan={3} className="border px-2 py-2 min-w-[100px]">
-                  EXTERNA
-                </th>
+                    <p className="mt-3 text-sm font-bold text-slate-700">
+                      Aún no hay registros
+                    </p>
+
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      Los puntos de enfoque aparecerán en esta sección.
+                    </p>
+
+                  </div>
+
+                </td>
+
               </tr>
 
-              <tr className="bg-[#eef4fb] text-center">
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">Existe</th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">Aprobado</th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[65px]">Difundido</th>
+            ) : (
 
-                <th rowSpan={2} className="border px-2 py-2 min-w-[80px]">
-                  Implementado
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[80px]">
-                  Actualizado
-                </th>
+              registrosOrdenados.map((registro) => (
 
-                <th rowSpan={2} className="border px-2 py-2 min-w-[90px] bg-[#d6e5f4]">
-                  Calificación
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[100px] bg-[#d6e5f4]">
-                  Nivel
-                </th>
+                <Fragment key={registro.principioId}>
 
-                <th rowSpan={2} className="border px-2 py-2 min-w-[160px]">
-                  TIPO DE DOCUMENTO
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[260px]">
-                  DESCRIPCIÓN
-                </th>
-                <th rowSpan={2} className="border px-2 py-2 min-w-[170px]">
-                  FECHA DE EMISIÓN / APROBACIÓN
-                </th>
-              </tr>
 
-              <tr className="bg-[#eef4fb] text-center">
-                <th className="border px-2 py-2"></th>
-              </tr>
-            </thead>
+                  {/* ==================================================
+                      FILA DEL PRINCIPIO
+                  ================================================== */}
 
-            <tbody>
-              {registrosOrdenados.length === 0 ? (
-                <tr>
-                  <td colSpan={17} className="border px-4 py-8 text-center text-slate-500">
-                    Aún no hay registros.
-                  </td>
-                </tr>
-              ) : (
-                registrosOrdenados.map((registro) => (
-                  <Fragment key={registro.principioId}>
-                    <tr className={`${registro.rowColor} font-semibold`}>
-                      <td colSpan={17} className="border px-3 py-3">
-                        {registro.preguntaGeneral.numero} {registro.preguntaGeneral.texto}
+                  <tr>
+
+                    <td
+                      colSpan={17}
+                      className="border border-blue-200 bg-gradient-to-r from-[#e8f2fb] via-[#edf7fb] to-[#e8f8f6] px-4 py-3"
+                    >
+
+                      <div className="flex items-start gap-3">
+
+                        {/* IDENTIFICADOR */}
+
+                        <div className="mt-0.5 flex h-7 min-w-7 shrink-0 items-center justify-center rounded-lg bg-[#0b4da2] px-2 text-[10px] font-black text-white shadow-sm">
+
+                          {registro.preguntaGeneral.numero}
+
+                        </div>
+
+
+                        {/* TEXTO */}
+
+                        <div>
+
+                         
+
+                          <p className="mt-1 text-xs font-bold leading-5 text-[#123d5c]">
+                            {registro.preguntaGeneral.texto}
+                          </p>
+
+                        </div>
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+
+
+                  {/* ==================================================
+                      PREGUNTAS
+                  ================================================== */}
+
+                  {registro.preguntas.map((pregunta, index) => (
+
+                    <tr
+                      key={`${registro.principioId}-${index}`}
+                      className="bg-white transition-colors duration-150 hover:bg-[#f7fbfd]"
+                    >
+
+
+                      {/* NÚMERO */}
+
+                      <td className="border border-slate-200 px-3 py-3 text-center align-top">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                          {pregunta.numero}
+                        </span>
+
                       </td>
+
+
+
+                      {/* PREGUNTA */}
+
+                      <td className="border border-slate-200 px-4 py-3 align-top">
+
+                        <p className="text-xs leading-5 text-slate-700">
+                          {pregunta.texto}
+                        </p>
+
+                      </td>
+
+
+
+                      {/* CARGO */}
+
+                      <td className="border border-slate-200 px-3 py-3 align-top">
+
+                        {pregunta.cargo ? (
+
+                          <span className="inline-flex rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
+                            {pregunta.cargo}
+                          </span>
+
+                        ) : (
+
+                          <span className="text-xs text-slate-400">
+                            Sin asignar
+                          </span>
+
+                        )}
+
+                      </td>
+
+
+
+                      {/* EXISTE */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">
+                          {pregunta.existe}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* APROBADO */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">
+                          {pregunta.aprobado}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* DIFUNDIDO */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">
+                          {pregunta.difundido}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* ESTÁ PRESENTE */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span
+                          className={`inline-flex min-w-[45px] items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                            pregunta.estaPresente === "SI"
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                              : "bg-red-50 text-red-600 ring-1 ring-red-200"
+                          }`}
+                        >
+                          {pregunta.estaPresente}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* IMPLEMENTADO */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">
+                          {pregunta.implementado}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* ACTUALIZADO */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[32px] items-center justify-center rounded-lg bg-slate-100 px-2 py-1 font-bold text-slate-700">
+                          {pregunta.actualizado}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* ESTÁ FUNCIONANDO */}
+
+                      <td className="border border-slate-200 px-2 py-3 text-center align-middle">
+
+                        <span
+                          className={`inline-flex min-w-[45px] items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                            pregunta.estaFuncionando === "SI"
+                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                              : "bg-red-50 text-red-600 ring-1 ring-red-200"
+                          }`}
+                        >
+                          {pregunta.estaFuncionando}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* CALIFICACIÓN */}
+
+                      <td className="border border-slate-200 bg-cyan-50/30 px-2 py-3 text-center align-middle">
+
+                        <span className="inline-flex min-w-[36px] items-center justify-center rounded-lg bg-[#e0f2f4] px-2 py-1.5 font-black text-[#087183]">
+                          {pregunta.calificacion}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* NIVEL */}
+
+                      <td className="border border-slate-200 bg-cyan-50/20 px-2 py-3 text-center align-middle">
+
+                        <span
+                          className={`inline-flex min-w-[65px] items-center justify-center rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${
+                            pregunta.nivel === "Bajo"
+                              ? "bg-red-50 text-red-600 ring-red-200"
+                              : pregunta.nivel === "Medio"
+                              ? "bg-amber-50 text-amber-700 ring-amber-200"
+                              : "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          }`}
+                        >
+                          {pregunta.nivel}
+                        </span>
+
+                      </td>
+
+
+
+                      {/* TIPO DOCUMENTO */}
+
+                      <td className="border border-slate-200 px-3 py-3 align-top">
+
+                        {pregunta.tipoDocumento ? (
+
+                          <span className="inline-flex rounded-lg bg-violet-50 px-2.5 py-1 text-[10px] font-semibold text-violet-700">
+                            {pregunta.tipoDocumento}
+                          </span>
+
+                        ) : (
+
+                          <span className="text-[10px] text-slate-400">
+                            Sin especificar
+                          </span>
+
+                        )}
+
+                      </td>
+
+
+
+                      {/* DESCRIPCIÓN */}
+
+                      <td className="border border-slate-200 px-4 py-3 align-top">
+
+                        {pregunta.descripcion ? (
+
+                          <p className="text-xs leading-5 text-slate-600">
+                            {pregunta.descripcion}
+                          </p>
+
+                        ) : (
+
+                          <span className="text-[10px] text-slate-400">
+                            Sin descripción
+                          </span>
+
+                        )}
+
+                      </td>
+
+
+
+                      {/* FECHA */}
+
+                      <td className="border border-slate-200 px-3 py-3 text-center align-middle">
+
+                        {pregunta.fechaEmision ? (
+
+                          <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-medium text-slate-700">
+                            {pregunta.fechaEmision}
+                          </span>
+
+                        ) : (
+
+                          <span className="text-[10px] text-slate-400">
+                            Sin fecha
+                          </span>
+
+                        )}
+
+                      </td>
+
+
+
+                      {/* INTERNA */}
+
+                      <td className="border border-slate-200 px-3 py-3 text-center align-top">
+
+                        {pregunta.interna || (
+                          <span className="text-slate-300">—</span>
+                        )}
+
+                      </td>
+
+
+
+                      {/* EXTERNA */}
+
+                      <td className="border border-slate-200 px-3 py-3 text-center align-top">
+
+                        {pregunta.externa || (
+                          <span className="text-slate-300">—</span>
+                        )}
+
+                      </td>
+
                     </tr>
 
-                    {registro.preguntas.map((pregunta, index) => (
-                      <tr key={`${registro.principioId}-${index}`} className="hover:bg-slate-50">
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.numero}</td>
-                        <td className="border px-2 py-2 align-top">{pregunta.texto}</td>
+                  ))}
 
-                   <td className="border px-2 py-2 align-top">
-  {pregunta.cargo || "-"}
-</td>
+                </Fragment>
 
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.existe}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.aprobado}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.difundido}</td>
+              ))
 
-                        <td className="border px-2 py-2 text-center align-top">
-                          <span
-                            className={`inline-flex rounded px-2 py-1 text-xs font-semibold ${
-                              pregunta.estaPresente === "SI"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {pregunta.estaPresente}
-                          </span>
-                        </td>
+            )}
 
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.implementado}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.actualizado}</td>
+          </tbody>
 
-                        <td className="border px-2 py-2 text-center align-top">
-                          <span
-                            className={`inline-flex rounded px-2 py-1 text-xs font-semibold ${
-                              pregunta.estaFuncionando === "SI"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                            }`}
-                          >
-                            {pregunta.estaFuncionando}
-                          </span>
-                        </td>
+        </table>
 
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.calificacion}</td>
-
-                        <td className="border px-2 py-2 text-center align-top">
-                          <span
-                            className={`inline-flex rounded px-2 py-1 text-xs font-semibold ${
-                              pregunta.nivel === "Bajo"
-                                ? "bg-red-100 text-red-700"
-                                : pregunta.nivel === "Medio"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-green-100 text-green-700"
-                            }`}
-                          >
-                            {pregunta.nivel}
-                          </span>
-                        </td>
-
-                        <td className="border px-2 py-2 align-top">{pregunta.tipoDocumento}</td>
-                        <td className="border px-2 py-2 align-top">{pregunta.descripcion}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.fechaEmision}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.interna}</td>
-                        <td className="border px-2 py-2 text-center align-top">{pregunta.externa}</td>
-                      </tr>
-                    ))}
-                  </Fragment>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
+
+
+
+      {/* ========================================================
+          SCROLL HORIZONTAL FIJO
+          SE MANTIENE TU MISMA LÓGICA
+      ======================================================== */}
+
+      <div
+        ref={scrollFijoRef}
+        className="fixed bottom-0 left-[var(--sidebar-width)] right-0 z-50 h-5 overflow-x-auto border-t border-slate-200 bg-white shadow-[0_-4px_12px_rgba(15,23,42,0.08)]"
+      >
+
+        <div
+          style={{
+            width: `${anchoTabla + 180}px`,
+          }}
+          className="h-1"
+        />
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">

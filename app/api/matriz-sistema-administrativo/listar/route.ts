@@ -61,6 +61,9 @@ export async function GET(req: NextRequest) {
           calificacion: d.Calificacion ?? 0,
           nivel: d.Nivel ?? "",
           tipoDocumento: d.TipoDocumento ?? "",
+          documentId: d.DocumentId ?? null,
+      nombreDocumento: d.NombreDocumento ?? "",
+      pdfUrl: d.PdfUrl ?? "",
           descripcion: d.Descripcion ?? "",
           fechaEmision: d.FechaEmision
             ? new Date(d.FechaEmision).toISOString().split("T")[0]

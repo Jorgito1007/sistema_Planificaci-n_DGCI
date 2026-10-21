@@ -23,6 +23,21 @@ if (!actorUserId) {
     const Nombre = String(formData.get("Nombre") || "").trim();
     const SubModuleId = Number(formData.get("SubModuleId"));
 
+    // Datos para vincular el documento con una pregunta de una matriz
+const TipoMatriz = String(
+  formData.get("TipoMatriz") || ""
+).trim();
+
+const QuestionIdRaw = formData.get("QuestionId");
+
+const QuestionId =
+  QuestionIdRaw !== null && String(QuestionIdRaw).trim() !== ""
+    ? Number(QuestionIdRaw)
+    : null;
+
+const OrigenMatriz =
+  String(formData.get("OrigenMatriz") || "") === "true";
+
     const Elaborado = String(formData.get("Elaborado")) === "true";
     const Aprobado = String(formData.get("Aprobado")) === "true";
     const Implementado = String(formData.get("Implementado")) === "true";
@@ -48,33 +63,83 @@ if (!actorUserId) {
       );
     }
 
-    if (Aprobado && !Elaborado) {
-      return NextResponse.json(
-        { error: "No puede aprobar un documento no elaborado" },
-        { status: 400 }
-      );
-    }
+    // Si el documento viene desde una matriz,
+// debe indicar la matriz y la pregunta.
+if (OrigenMatriz) {
+  if (
+    TipoMatriz !== "SISTEMA_ADMINISTRATIVO" &&
+    TipoMatriz !== "COMPONENTE"
+  ) {
+    return NextResponse.json(
+      { error: "El tipo de matriz es inválido" },
+      { status: 400 }
+    );
+  }
 
-    if (Implementado && (!Elaborado || !Aprobado)) {
-      return NextResponse.json(
-        { error: "No puede implementar un documento sin elaborar y aprobar" },
-        { status: 400 }
-      );
-    }
+  if (
+    QuestionId === null ||
+    Number.isNaN(QuestionId) ||
+    QuestionId <= 0
+  ) {
+    return NextResponse.json(
+      { error: "El QuestionId es inválido" },
+      { status: 400 }
+    );
+  }
+}
 
-    if (Actualizado && (!Elaborado || !Aprobado || !Implementado)) {
-      return NextResponse.json(
-        { error: "No puede actualizar un documento sin los estados previos" },
-        { status: 400 }
-      );
-    }
+   // La página tradicional de documentos conserva
+// las validaciones secuenciales.
+// Cuando viene desde una matriz, los estados ya fueron
+// determinados por la evaluación de la pregunta.
+if (!OrigenMatriz) {
+  if (Aprobado && !Elaborado) {
+    return NextResponse.json(
+      { error: "No puede aprobar un documento no elaborado" },
+      { status: 400 }
+    );
+  }
 
-    if (Difundido && (!Elaborado || !Aprobado || !Implementado || !Actualizado)) {
-      return NextResponse.json(
-        { error: "No puede difundir un documento sin los estados previos" },
-        { status: 400 }
-      );
-    }
+  if (Implementado && (!Elaborado || !Aprobado)) {
+    return NextResponse.json(
+      {
+        error:
+          "No puede implementar un documento sin elaborar y aprobar",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    Actualizado &&
+    (!Elaborado || !Aprobado || !Implementado)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "No puede actualizar un documento sin los estados previos",
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    Difundido &&
+    (!Elaborado ||
+      !Aprobado ||
+      !Implementado ||
+      !Actualizado)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "No puede difundir un documento sin los estados previos",
+      },
+      { status: 400 }
+    );
+  }
+}
+
 
     if (Aprobado && !Fecha_Aprobado) {
       return NextResponse.json(
@@ -222,6 +287,52 @@ const usuarioEmail =
       
     const newDocument = result.recordset[0];
 
+    // =====================================================
+// VINCULAR DOCUMENTO CON LA PREGUNTA DE LA MATRIZ
+// =====================================================
+
+if (OrigenMatriz && QuestionId !== null) {
+
+  // MATRIZ DEL SISTEMA ADMINISTRATIVO
+  if (TipoMatriz === "SISTEMA_ADMINISTRATIVO") {
+    const updateResult = await pool
+      .request()
+      .input("QuestionId", QuestionId)
+      .input("DocumentId", newDocument.DocumentId)
+      .query(`
+        UPDATE dbo.Matriz_SistemaAdministrativoDetalle
+        SET DocumentId = @DocumentId
+        WHERE Id = @QuestionId
+      `);
+
+    if (!updateResult.rowsAffected[0]) {
+      throw new Error(
+        "No se encontró la pregunta en la Matriz del Sistema Administrativo."
+      );
+    }
+  }
+
+  // MATRIZ POR COMPONENTES
+  if (TipoMatriz === "COMPONENTE") {
+    const updateResult = await pool
+      .request()
+      .input("QuestionId", QuestionId)
+      .input("DocumentId", newDocument.DocumentId)
+      .query(`
+        UPDATE dbo.EvaluacionesPrincipioDetalleDGCI
+        SET DocumentId = @DocumentId
+        WHERE Id = @QuestionId
+      `);
+
+    if (!updateResult.rowsAffected[0]) {
+      throw new Error(
+        "No se encontró la pregunta en la Matriz por Componentes."
+      );
+    }
+  }
+}
+
+
 const subModuleResult = await pool
   .request()
   .input("SubModuleId", newDocument.SubModuleId)
@@ -290,19 +401,25 @@ try {
       .input(
         "Details",
         JSON.stringify({
-          documento: newDocument.Nombre,
-          subModuleId: newDocument.SubModuleId,
-          elaborado: newDocument.Elaborado,
-          aprobado: newDocument.Aprobado,
-          fechaAprobado: newDocument.Fecha_Aprobado,
-          implementado: newDocument.Implementado,
-          actualizado: newDocument.Actualizado,
-          fechaActualizado: newDocument.Fecha_Actualizado,
-          difundido: newDocument.Difundido,
-          pdfUrl: newDocument.PdfUrl,
-          creadoPor: usuarioNombre,
-          fechaCreacion: new Date().toISOString(),
-        })
+  documentId: newDocument.DocumentId,
+  documento: newDocument.Nombre,
+
+  origenMatriz: OrigenMatriz,
+  tipoMatriz: OrigenMatriz ? TipoMatriz : null,
+  questionId: OrigenMatriz ? QuestionId : null,
+
+  subModuleId: newDocument.SubModuleId,
+  elaborado: newDocument.Elaborado,
+  aprobado: newDocument.Aprobado,
+  fechaAprobado: newDocument.Fecha_Aprobado,
+  implementado: newDocument.Implementado,
+  actualizado: newDocument.Actualizado,
+  fechaActualizado: newDocument.Fecha_Actualizado,
+  difundido: newDocument.Difundido,
+  pdfUrl: newDocument.PdfUrl,
+  creadoPor: usuarioNombre,
+  fechaCreacion: new Date().toISOString(),
+})
       )
       .query(`
         INSERT INTO dbo.Auditoria_Datos_Dgci (

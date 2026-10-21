@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Pencil, Trash2,Eye, EyeOff } from "lucide-react";
+import { Pencil, Trash2, Eye, EyeOff, KeyRound, Lock, Unlock, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
+import { useRouter } from "next/navigation";
 
 type UserRow = {
   id: string;
@@ -36,6 +36,8 @@ export function UsersPermissionsUI() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+const [changingStatusUserId, setChangingStatusUserId] = useState<string | null>(null);
 const [openSubmoduleId, setOpenSubmoduleId] = useState<string | null>(null);
 
 async function openEdit(u: UserRow) {
@@ -168,7 +170,7 @@ for (const pp of data.principlePermissions || []) {
     Object.entries(sa).find(([, allowed]) => allowed)?.[0] ?? null;
 
   setOpenSubmoduleId(firstAllowedSubmodule);
-  setOpenCreate(true);
+
 }
 
 
@@ -269,7 +271,7 @@ type ModuleRow = {
 const [modules, setModules] = useState<ModuleRow[]>([]);
 const [modulesLoading, setModulesLoading] = useState(false);
 
-const [openCreate, setOpenCreate] = useState(false);
+const router = useRouter();
 const [editTarget, setEditTarget] = useState<UserRow | null>(null);
 
 const [form, setForm] = useState({
@@ -544,8 +546,6 @@ const res = await fetch("/api/admin/users/create", {
       is_active: true,
     });
 
-    // cerrar modal
-    setOpenCreate(false);
 
     // recargar tabla
     await loadUsers();
@@ -575,6 +575,175 @@ function buildQuestionsPayload() {
         canDelete: false,
       };
     });
+}
+
+// ============================================================
+// REINICIAR CONTRASEÑA
+// ============================================================
+
+async function handleResetPassword(u: UserRow) {
+  const nombre = u.full_name || u.email;
+
+  const confirm = await Swal.fire({
+    icon: "warning",
+    title: "¿Reiniciar contraseña?",
+    html: `
+      <div style="text-align:left;line-height:1.6">
+        <p>Se generará una <strong>nueva contraseña temporal</strong> para:</p>
+        <p style="margin-top:8px"><strong>${nombre}</strong></p>
+        <p>${u.email}</p>
+        <p style="margin-top:12px">
+          La contraseña será enviada al correo institucional y el usuario
+          deberá cambiarla en su próximo inicio de sesión.
+        </p>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: "Sí, reiniciar",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: "#c7a97a",
+    cancelButtonColor: "#64748b",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    setResettingUserId(u.id);
+
+    const res = await fetch(`/api/admin/users/${u.id}/reset-password`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data?.detail ||
+          data?.error ||
+          "No se pudo reiniciar la contraseña."
+      );
+    }
+
+    if (data.emailSent === false) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Contraseña reiniciada",
+        text:
+          data?.warning ||
+          "La contraseña temporal fue generada, pero no se pudo enviar el correo al usuario.",
+        confirmButtonColor: "#c7a97a",
+      });
+      return;
+    }
+
+    await Swal.fire({
+      icon: "success",
+      title: "Contraseña reiniciada",
+      html: `
+        <p>Se generó una nueva contraseña temporal.</p>
+        <p style="margin-top:8px">
+          Las nuevas credenciales fueron enviadas a
+          <strong>${u.email}</strong>.
+        </p>
+      `,
+      confirmButtonColor: "#16a34a",
+    });
+  } catch (error) {
+    await Swal.fire({
+      icon: "error",
+      title: "No se pudo reiniciar",
+      text:
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error inesperado.",
+      confirmButtonColor: "#dc2626",
+    });
+  } finally {
+    setResettingUserId(null);
+  }
+}
+
+// ============================================================
+// BLOQUEAR / DESBLOQUEAR USUARIO
+// ============================================================
+
+async function handleToggleUserStatus(u: UserRow) {
+  const bloquear = u.is_active;
+  const nombre = u.full_name || u.email;
+
+  const confirm = await Swal.fire({
+    icon: bloquear ? "warning" : "question",
+    title: bloquear ? "¿Bloquear usuario?" : "¿Desbloquear usuario?",
+    html: bloquear
+      ? `
+          <div style="line-height:1.6">
+            <p><strong>${nombre}</strong> no podrá ingresar al SCI mientras permanezca bloqueado.</p>
+          </div>
+        `
+      : `
+          <div style="line-height:1.6">
+            <p><strong>${nombre}</strong> volverá a tener acceso al SCI según los permisos asignados.</p>
+          </div>
+        `,
+    showCancelButton: true,
+    confirmButtonText: bloquear ? "Sí, bloquear" : "Sí, desbloquear",
+    cancelButtonText: "Cancelar",
+    confirmButtonColor: bloquear ? "#d97706" : "#16a34a",
+    cancelButtonColor: "#64748b",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    setChangingStatusUserId(u.id);
+
+    const res = await fetch(`/api/admin/users/${u.id}/status`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        is_active: !u.is_active,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data?.detail ||
+          data?.error ||
+          (bloquear
+            ? "No se pudo bloquear el usuario."
+            : "No se pudo desbloquear el usuario.")
+      );
+    }
+
+    await Swal.fire({
+      icon: "success",
+      title: bloquear ? "Usuario bloqueado" : "Usuario desbloqueado",
+      text: bloquear
+        ? "El usuario ya no podrá ingresar al sistema."
+        : "El usuario puede volver a ingresar al sistema.",
+      confirmButtonColor: bloquear ? "#d97706" : "#16a34a",
+    });
+
+    await loadUsers();
+  } catch (error) {
+    await Swal.fire({
+      icon: "error",
+      title: bloquear ? "No se pudo bloquear" : "No se pudo desbloquear",
+      text:
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error inesperado.",
+      confirmButtonColor: "#dc2626",
+    });
+  } finally {
+    setChangingStatusUserId(null);
+  }
 }
 
 //Eliminar usuarios
@@ -726,7 +895,6 @@ const res = await fetch(`/api/admin/users/${editTarget.id}`, {
     text: "El usuario fue actualizado correctamente.",
   });
 
-  setOpenCreate(false);
   setEditTarget(null);
   setForm({ full_name: "", email: "", password: "", role: "", is_active: true });
 
@@ -746,321 +914,29 @@ if (!mounted) {
     <div className="flex flex-col gap-5">
       {/* Header + button */}
       <div className="flex items-start justify-between gap-3">
-   
-<Dialog open={openCreate} onOpenChange={setOpenCreate}>
-  <DialogTrigger asChild>
-<Button
-  className="bg-blue-600 hover:bg-blue-700"
+   <Button
   type="button"
-  onClick={() => {
-    // ✅ modo crear
-    setEditTarget(null);
-
-    // ✅ limpiar form
-    setForm({
-      full_name: "",
-      email: "",
-      password: "",
-      role: "asesor",
-      is_active: true,
-    });
-
-    // ✅ reset permisos
-    const ma: Record<string, boolean> = {};
-    const sa: Record<string, boolean> = {};
-    const pa: Record<string, boolean> = {};
-    const qa: Record<string, boolean> = {};
-
-
-setModuleAccess(ma);
-setSubmoduleAccess(sa);
-setPrincipleAccess(pa);
-setOpenSubmoduleId(null);
-setQuestionAccess(qa);
-
-    // ✅ abrir
-    setOpenCreate(true);
-  }}
+  onClick={() =>
+    router.push(
+      "/dashboard/permisos/usuario/nuevo"
+    )
+  }
+  className="
+    h-10
+    rounded-xl
+    bg-blue-600
+    px-5
+    font-semibold
+    text-white
+    shadow-sm
+    transition-all
+    hover:-translate-y-0.5
+    hover:bg-blue-700
+  "
 >
   + Nuevo Usuario
 </Button>
-  </DialogTrigger>
 
- <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-    <DialogHeader>
-   <DialogTitle>{editTarget ? "Actualizar Usuario" : "Nuevo Usuario"}</DialogTitle>
-    </DialogHeader>
-
-  <div className="grid gap-4">
-      {/* fila 1 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Nombre Completo</label>
-          <Input
-            placeholder="Nombre del usuario"
-            value={form.full_name}
-            onChange={(e) => setForm((p) => ({ ...p, full_name: e.target.value }))}
-          />
-        </div>
-    <div className="grid gap-2">
-          <label className="text-sm font-medium">Correo institucional</label>
-          <Input
-            type="email"
-            placeholder="nombre.apellido@uncsm.edu.ni"
-            value={form.email}
-            onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-          />
-        </div>
- 
-      </div>
-
-      {/* fila 2 */}
-      <div className="grid grid-cols-2 gap-4">
-    
-     <div>
-  <label className="mb-2 block text-sm font-medium">
-    Contraseña
-  </label>
-
-  <div className="relative">
-    <Input
-      type={showPassword ? "text" : "password"}
-      placeholder="Contraseña"
-      value={form.password}
-      onChange={(e) =>
-        setForm((prev) => ({
-          ...prev,
-          password: e.target.value,
-        }))
-      }
-      className="pr-10"
-    />
-
-    <button
-      type="button"
-      onClick={() => setShowPassword((prev) => !prev)}
-      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
-    >
-      {showPassword ? (
-        <EyeOff className="h-5 w-5" />
-      ) : (
-        <Eye className="h-5 w-5" />
-      )}
-    </button>
-  </div>
-</div>
-           <div className="grid gap-2">
-          <label className="text-sm font-medium">Rol</label>
-          <select
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-            value={form.role}
-            onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
-          >
-           {roles.map((r) => (
-  <option key={r.RoleId} value={r.RoleKey}>
-    {r.RoleName}
-  </option>
-))}
-          </select>
-        </div>
-
-      </div>
-
-      {/* fila 3 */}
-      <div className="grid grid-cols-2 gap-4">
-     
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Estado</label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setForm((p) => ({ ...p, is_active: !p.is_active }))}
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                form.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-              }`}
-            >
-              {form.is_active ? "Activo" : "Inactivo"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Permisos */}
-     <div className="grid gap-2">
-        <div className="text-sm font-semibold">Permisos de Módulos</div>
-
-        <div className="rounded-lg border overflow-hidden">
-          {modulesLoading ? (
-            <div className="p-4 text-sm text-muted-foreground">Cargando módulos...</div>
-      ) : modules.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">
-              No hay módulos. Revisa <code>/api/admin/modules</code>.
-            </div>
-          ) : (
-           <div className="divide-y">
-              {modules.map((m) => {
-                const allowed = !!moduleAccess[m.id];
-                return (
-                  <div key={m.id}>
-                    {/* fila módulo */}
-                    <div className={`flex items-center justify-between p-3 ${allowed ? "bg-emerald-50" : "bg-white"}`}>
-                      <div className="font-medium">{m.name}</div>
-                      <button
-                        type="button"
-                        onClick={() => toggleModule(m.id)}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-                          allowed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {allowed ? "Permitido" : "Denegado"}
-                      </button>
-                    </div>
-
-                    {/* submódulos (solo si módulo permitido) */}
-                    
-              {allowed && (m.submodules?.length ?? 0) > 0 && (
-  <div className="bg-white">
-    {m.submodules.map((s) => {
-
-
- const sk = subKey(m.id, s.id);
-  const sAllowed = !!submoduleAccess[sk];
-
-
-      return (
-        <div key={`submodule-${m.id}-${s.id}`} className="border-t">
-          <div className="flex items-center justify-between px-5 py-2">
-            <div className="text-sm text-slate-700">{s.name}</div>
-
-          <button
-  type="button"
- onClick={() => {
-  const wasAllowed = !!submoduleAccess[sk];
-
-  toggleSubmodule(s.id, m.id);
-
-  if (!wasAllowed) {
-    setOpenSubmoduleId(sk);
-  } else {
-    setOpenSubmoduleId(null);
-  }
-}}
-  className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
-    sAllowed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-  }`}
->
-  {sAllowed ? "Permitido" : "Denegado"}
-</button>
-          </div>
-
-          {sAllowed && openSubmoduleId === sk && (s.principles?.length ?? 0) > 0 && (
-            <div className="bg-slate-50 px-8 py-3 space-y-2">
-              {s.principles.map((p) => {
-                const pk = principleKey(m.id, s.id, p.id);
-const pAllowed = !!principleAccess[pk];
-
-                return (
-                  <div
-                    key={`principle-${s.id}-${p.id}`}
-                    className="flex items-start justify-between gap-3 rounded-md border bg-white px-3 py-2"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-slate-800">
-                        {p.title}
-                      </div>
-
-                      <div className="text-xs text-slate-500">
-                        {p.number}. {p.text}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => togglePrinciple(p.id, s.id, m.id)}
-                      className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                        pAllowed
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {pAllowed ? "Permitido" : "Denegado"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Preguntas */}
-
-{sAllowed && openSubmoduleId === sk && (s.questions?.length ?? 0) > 0 && (
-  <div className="bg-slate-50 px-8 py-3 space-y-2">
-    {s.questions.map((q) => {
-      const qk = questionKey(m.id, s.id, q.id);
-      const qAllowed = !!questionAccess[qk];
-
-      return (
-        <div
-          key={`question-${s.id}-${q.id}`}
-          className="flex items-start justify-between gap-3 rounded-md border bg-white px-3 py-2"
-        >
-          <div>
-            <div className="text-sm font-medium text-slate-800">
-              Pregunta {q.number}
-            </div>
-
-            <div className="text-xs text-slate-500">
-              {q.text}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => toggleQuestion(q.id, s.id, m.id)}
-            className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold ${
-              qAllowed
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-red-100 text-red-700"
-            }`}
-          >
-            {qAllowed ? "Permitido" : "Denegado"}
-          </button>
-        </div>
-      );
-    })}
-  </div>
-)}
-        </div>
-      );
-    })}
-  </div>
-
-  
-)}
-
-
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-    </div>
-    </div>
-
-    <div className="flex justify-end gap-3 pt-4">
-      <Button variant="outline" onClick={() => setOpenCreate(false)}>
-        Cancelar
-      </Button>
-    <Button
-  className="bg-blue-600 hover:bg-blue-700"
-  onClick={editTarget ? handleUpdateUser : handleCreateUser}
->
-  {editTarget ? "Actualizar Usuario" : "Crear Usuario"}
-</Button>
-    </div>
-  </DialogContent>
-</Dialog>
 </div>
 
       
@@ -1178,20 +1054,63 @@ const pAllowed = !!principleAccess[pk];
 
           {/* ✅ ACCIONES (va DENTRO del <tr>) */}
           <td className="px-4 py-3">
-            <div className="flex items-center gap-3">
-<button
-  onClick={() => openEdit(u)}
-  type="button"
-  className="text-blue-600 hover:text-blue-800"
-  title="Editar"
->
-  <Pencil className="h-4 w-4" />
-</button>
+            <div className="flex items-center gap-2">
+              {/* EDITAR */}
               <button
-                className="text-red-600 hover:text-red-800"
-                title="Eliminar"
-                onClick={() => setDeleteTarget(u)}
+                onClick={() =>
+                  router.push(
+                    `/dashboard/permisos/usuario/${u.id}/editar`
+                  )
+                }
                 type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100 hover:text-blue-800"
+                title="Editar usuario"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+
+              {/* REINICIAR CONTRASEÑA */}
+              <button
+                type="button"
+                disabled={resettingUserId === u.id}
+                onClick={() => handleResetPassword(u)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-700 transition hover:bg-amber-100 hover:text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Reiniciar contraseña"
+              >
+                {resettingUserId === u.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <KeyRound className="h-4 w-4" />
+                )}
+              </button>
+
+              {/* BLOQUEAR / DESBLOQUEAR */}
+              <button
+                type="button"
+                disabled={changingStatusUserId === u.id}
+                onClick={() => handleToggleUserStatus(u)}
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  u.is_active
+                    ? "bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-800"
+                    : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800"
+                }`}
+                title={u.is_active ? "Bloquear usuario" : "Desbloquear usuario"}
+              >
+                {changingStatusUserId === u.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : u.is_active ? (
+                  <Lock className="h-4 w-4" />
+                ) : (
+                  <Unlock className="h-4 w-4" />
+                )}
+              </button>
+
+              {/* ELIMINAR */}
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-100 hover:text-red-800"
+                title="Eliminar usuario"
+                onClick={() => setDeleteTarget(u)}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
