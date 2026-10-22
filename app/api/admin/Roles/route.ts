@@ -17,8 +17,10 @@ export async function GET() {
     return NextResponse.json(result.recordset);
     
   } catch (error: any) {
+    console.error("ERROR GET /api/admin/roles:", error);
+
     return NextResponse.json(
-      { error: "Error al cargar roles", detail: error.message },
+      { error: "Error al cargar roles", detail: "Contacte al administrador del sistema." },
       { status: 500 }
     );
   }

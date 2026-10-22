@@ -102,8 +102,7 @@ export async function GET() {
           "Error al cargar usuarios",
 
         detail:
-          error?.message ||
-          String(error),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

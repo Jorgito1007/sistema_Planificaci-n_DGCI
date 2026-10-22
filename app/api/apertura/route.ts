@@ -9,6 +9,7 @@ import {
 } from "@/lib/db";
 
 import {
+  getCurrentUser,
   getCurrentUserId,
 } from "@/lib/current-user";
 
@@ -96,7 +97,6 @@ export async function GET() {
       {
         ok: false,
         message:
-          error?.message ||
           "Error al obtener el histórico de aperturas.",
       },
       {
@@ -119,10 +119,9 @@ export async function POST(
     // USUARIO AUTENTICADO
     // ========================================================
 
-    const actorUserId =
-      await getCurrentUserId();
+    const me = await getCurrentUser();
 
-    if (!actorUserId) {
+    if (!me) {
       return NextResponse.json(
         {
           ok: false,
@@ -134,6 +133,38 @@ export async function POST(
         }
       );
     }
+
+    // ========================================================
+    // SOLO ADMINISTRACIÓN
+    // Abrir el período del sistema es una función de
+    // administrador / subadministrador (igual que en el
+    // menú "Control de Apertura").
+    // ========================================================
+
+    const roleKey = String(
+      me.roleKey || me.role || ""
+    )
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "");
+
+    if (
+      roleKey !== "administrador" &&
+      roleKey !== "subadministrador"
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "No tiene permiso para abrir el período del sistema.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const actorUserId = me.userId;
 
     // ========================================================
     // BODY
@@ -332,7 +363,6 @@ export async function POST(
         ok: false,
 
         message:
-          error?.message ||
           "Error al registrar la apertura del sistema.",
       },
       {

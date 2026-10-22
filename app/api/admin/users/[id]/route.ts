@@ -1080,9 +1080,7 @@ if (
           "No se pudo actualizar",
 
         detail:
-          String(
-            e?.message || e
-          ),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,
@@ -1245,9 +1243,7 @@ export async function DELETE(
           "No se pudo eliminar",
 
         detail:
-          String(
-            e?.message || e
-          ),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

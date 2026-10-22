@@ -883,9 +883,7 @@ export async function POST(
         ok: false,
 
         message:
-          error instanceof Error
-            ? error.message
-            : "No se pudo enviar el Plan de Acción.",
+          "No se pudo enviar el Plan de Acción.",
       },
       {
         status: 500,

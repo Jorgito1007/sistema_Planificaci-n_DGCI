@@ -218,7 +218,6 @@ export async function GET() {
         estado: "ERROR",
 
         message:
-          error?.message ||
           "Ocurrió un error al consultar el estado del sistema.",
       },
       {

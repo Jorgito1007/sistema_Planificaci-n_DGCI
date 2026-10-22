@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, sql } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/current-user";
-import path from "path";
 import {
   access,
-  mkdir,
   unlink,
-  writeFile,
 } from "fs/promises";
 import { sendMail } from "@/lib/sendMail";
+import {
+  validarArchivoSubido,
+  guardarArchivo,
+  rutaFisicaDesdeUrl,
+} from "@/lib/upload-documentos";
 
 export const runtime = "nodejs";
 
@@ -22,33 +24,11 @@ interface RouteContext {
  * Convierte una URL como:
  * /api/documents/file/1784216240708-documento.pdf
  *
- * en la ruta física:
- * public/uploads/documents/1784216240708-documento.pdf
+ * en la ruta física dentro del directorio privado:
+ * uploads/documents/1784216240708-documento.pdf
  */
 function getPhysicalFilePath(pdfUrl: string | null) {
-  if (!pdfUrl) {
-    return null;
-  }
-
-  const fileName = pdfUrl.split("/").pop();
-
-  if (!fileName) {
-    return null;
-  }
-
-  /**
-   * path.basename evita que se reciban rutas como:
-   * ../../archivo
-   */
-  const safeFileName = path.basename(fileName);
-
-  return path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "documents",
-    safeFileName
-  );
+  return rutaFisicaDesdeUrl(pdfUrl);
 }
 
 /**
@@ -145,44 +125,15 @@ export async function PATCH(
       );
     }
 
-    const allowedTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-
-    const extension = path.extname(file.name).toLowerCase();
-
-    const allowedExtensions = [
-      ".pdf",
-      ".doc",
-      ".docx",
-    ];
-
-    if (
-      !allowedTypes.includes(file.type) &&
-      !allowedExtensions.includes(extension)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Solo se permiten archivos PDF, DOC o DOCX",
-        },
-        { status: 400 }
-      );
-    }
-
     /**
-     * Límite opcional de 20 MB.
+     * Validación estricta centralizada:
+     * extensión + Content-Type + firma binaria + límite de 20 MB.
      */
-    const maxFileSize = 20 * 1024 * 1024;
+    const resultadoArchivo = await validarArchivoSubido(file);
 
-    if (file.size > maxFileSize) {
+    if (!resultadoArchivo.ok) {
       return NextResponse.json(
-        {
-          error:
-            "El archivo no puede superar los 20 MB",
-        },
+        { error: resultadoArchivo.error },
         { status: 400 }
       );
     }
@@ -250,42 +201,15 @@ export async function PATCH(
     }
 
     /**
-     * Guardar primero el nuevo archivo.
+     * Guardar primero el nuevo archivo
+     * en el directorio privado (fuera de public/).
      */
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const safeName = resultadoArchivo.safeName;
 
-    const uploadDirectory = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "documents"
+    newFilePath = await guardarArchivo(
+      safeName,
+      resultadoArchivo.buffer
     );
-
-    await mkdir(uploadDirectory, {
-      recursive: true,
-    });
-
-    const originalBaseName = path
-      .basename(file.name, extension)
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_+|_+$/g, "");
-
-    const baseName =
-      originalBaseName || "documento_actualizado";
-
-    const safeName =
-      `${Date.now()}-${baseName}${extension}`;
-
-    newFilePath = path.join(
-      uploadDirectory,
-      safeName
-    );
-
-    await writeFile(newFilePath, buffer);
 
     const newPdfUrl =
       `/api/documents/file/${safeName}`;
@@ -582,13 +506,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          error?.message ||
           "Error al actualizar el documento",
-        sqlMessage:
-          error?.originalError?.info?.message ||
-          null,
-        code: error?.code || null,
-        name: error?.name || null,
       },
       { status: 500 }
     );

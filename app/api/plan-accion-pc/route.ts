@@ -223,7 +223,6 @@ export async function GET(req: NextRequest) {
       {
         ok: false,
         message:
-          error.message ||
           "No se pudo obtener el Plan de Acción.",
       },
       {

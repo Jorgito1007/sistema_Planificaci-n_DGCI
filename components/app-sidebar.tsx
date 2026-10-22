@@ -61,79 +61,63 @@ import {
 
 /* ============================================================
    SUBMÓDULOS
-============================================================ */
 
-const sistemaAdminSubModules = [
-  {
-    id: 1,
-    title: "Administración de Talento Humano",
-    href: "/dashboard/sistema-administrativo/sa_talento_humano",
-  },
-  {
-    id: 2,
-    title: "Planeación y Programación",
-    href: "/dashboard/sistema-administrativo/sa_planeacion",
-  },
-  {
-    id: 3,
-    title: "Presupuesto",
-    href: "/dashboard/sistema-administrativo/sa_presupuesto",
-  },
-  {
-    id: 4,
-    title: "Administración Financiera",
-    href: "/dashboard/sistema-administrativo/sa_financiera",
-  },
-  {
-    id: 5,
-    title: "Contabilidad Integrada",
-    href: "/dashboard/sistema-administrativo/sa_ConIntegrada",
-  },
-  {
-    id: 6,
-    title: "Inversiones en Proyectos y Programa",
-    href: "/dashboard/sistema-administrativo/sa_Invproyec",
-  },
-  {
-    id: 7,
-    title: "Tecnología de la Información",
-    href: "/dashboard/sistema-administrativo/sa_TIC",
-  },
-];
+   IDs y claves alineados con dbo.Submodulos_Dgci (producción).
+
+   ModuleId 2  por_componentes      → SubModuleId 1–8
+   ModuleId 6  sa_Matriz            → SubModuleId 9–19
+   ModuleId 7  seguridad            → SubModuleId 20–21
+
+   El módulo 1 (sistema_administrativo) está deshabilitado
+   en la BD (IsActive = 0) y ya no se muestra en el menú.
+
+   Nota: en la BD existen "Presuntas sin Responder"
+   (SubModuleId 7 → sa_Psinresponder y SubModuleId 18 →
+   m_Psinresponder), pero aún no tienen página, por lo que
+   no se agregan al menú. Si se crean las rutas, añadir aquí
+   la entrada con su SubModuleId real.
+============================================================ */
 
 const porComponentesSubModules = [
   {
-    id: 8,
+    id: 1,
+    key: "sa_Entornocontrol",
     title: "Entorno de Control",
     href: "/dashboard/por-componentes/entorno-control",
   },
   {
-    id: 9,
+    id: 2,
+    key: "sa_ERiesgos",
     title: "Evaluación de Riesgos",
     href: "/dashboard/por-componentes/evaluacion-riesgos",
   },
   {
-    id: 10,
+    id: 3,
+    key: "sa_AControl",
     title: "Actividades de Control",
     href: "/dashboard/por-componentes/actividades-control",
   },
   {
-    id: 11,
+    id: 4,
+    key: "sa_IyC",
     title: "Información y Comunicación",
     href: "/dashboard/por-componentes/Informa-Comuni",
   },
   {
-    id: 12,
+    id: 5,
+    key: "sa_ASupervision",
     title: "Actividades de Supervisión",
     href: "/dashboard/por-componentes/actividad-supervision",
   },
   {
-    id: 13,
+    id: 6,
+    key: "sa_Reultados",
     title: "Resultados",
     href: "/dashboard/por-componentes/Resultados",
   },
   {
-    id: 15,
+    id: 8,
+    key: "sa_Planaccion",
     title: "Plan de Acción",
     href: "/dashboard/por-componentes/Plan_Accion",
   },
@@ -141,52 +125,62 @@ const porComponentesSubModules = [
 
 const matrizSistemaAdminSubModules = [
   {
-    id: 16,
+    id: 9,
+    key: "m_talento_humano",
     title: "Administración de Talento Humano",
     href: "/dashboard/matriz_sa/ma_talento_humano",
   },
   {
-    id: 17,
+    id: 10,
+    key: "m_planeacion",
     title: "Planeación y Programación",
     href: "/dashboard/matriz_sa/ma_planeacion",
   },
   {
-    id: 18,
+    id: 11,
+    key: "m_presupuesto",
     title: "Presupuesto",
     href: "/dashboard/matriz_sa/ma_presupuesto",
   },
   {
-    id: 19,
+    id: 12,
+    key: "m_financiera",
     title: "Administración Financiera",
     href: "/dashboard/matriz_sa/ma_financiera",
   },
   {
-    id: 20,
+    id: 13,
+    key: "m_ConIntegrada",
     title: "Contabilidad Integrada",
     href: "/dashboard/matriz_sa/ma_ConIntegrada",
   },
   {
-    id: 21,
+    id: 14,
+    key: "m_CyABS",
     title: "Contratación y Administración de Bienes y Servicios",
     href: "/dashboard/matriz_sa/ma_contbys",
   },
   {
-    id: 22,
+    id: 15,
+    key: "m_TIC",
     title: "Tecnología de la Información",
     href: "/dashboard/matriz_sa/ma_TIC",
   },
   {
-    id: 23,
+    id: 16,
+    key: "m_Invproyec",
     title: "Inversiones en Programas y Proyectos",
     href: "/dashboard/matriz_sa/ma_InvPoyect",
   },
   {
-    id: 24,
+    id: 17,
+    key: "m_Reultados",
     title: "Resultados",
     href: "/dashboard/matriz_sa/Resultados",
   },
   {
-    id: 26,
+    id: 19,
+    key: "m_PlanAccion",
     title: "Plan de Acción",
     href: "/dashboard/matriz_sa/Plan_Accion",
   },
@@ -194,12 +188,14 @@ const matrizSistemaAdminSubModules = [
 
 const seguridadSubModules = [
   {
-    id: 27,
+    id: 20,
+    key: "s_roles_permisos",
     title: "Roles y Permisos",
     href: "/dashboard/seguridad/roles_permisos",
   },
   {
-    id: 28,
+    id: 21,
+    key: "s_auditoria",
     title: "Auditoría del Sistema",
     href: "/dashboard/seguridad/auditoria_datos",
   },
@@ -244,34 +240,44 @@ type AccesoModulo = {
 
 function getMatrizIcon(id: number) {
   switch (id) {
-    case 16:
+    // SubModuleId 9 → m_talento_humano
+    case 9:
       return UserRoundCog;
 
-    case 17:
+    // SubModuleId 10 → m_planeacion
+    case 10:
       return CalendarRange;
 
-    case 18:
+    // SubModuleId 11 → m_presupuesto
+    case 11:
       return WalletCards;
 
-    case 19:
+    // SubModuleId 12 → m_financiera
+    case 12:
       return Landmark;
 
-    case 20:
+    // SubModuleId 13 → m_ConIntegrada
+    case 13:
       return BookOpenCheck;
 
-    case 21:
+    // SubModuleId 14 → m_CyABS
+    case 14:
       return ShoppingBag;
 
-    case 22:
+    // SubModuleId 15 → m_TIC
+    case 15:
       return MonitorCog;
 
-    case 23:
+    // SubModuleId 16 → m_Invproyec
+    case 16:
       return FolderKanban;
 
-    case 24:
+    // SubModuleId 17 → m_Reultados
+    case 17:
       return ChartNoAxesCombined;
 
-    case 26:
+    // SubModuleId 19 → m_PlanAccion
+    case 19:
       return ClipboardCheck;
 
     default:
@@ -285,25 +291,32 @@ function getMatrizIcon(id: number) {
 
 function getComponentIcon(id: number) {
   switch (id) {
-    case 8:
+    // SubModuleId 1 → sa_Entornocontrol
+    case 1:
       return ShieldCheck;
 
-    case 9:
+    // SubModuleId 2 → sa_ERiesgos
+    case 2:
       return ScanSearch;
 
-    case 10:
+    // SubModuleId 3 → sa_AControl
+    case 3:
       return Settings2;
 
-    case 11:
+    // SubModuleId 4 → sa_IyC
+    case 4:
       return MessageSquareText;
 
-    case 12:
+    // SubModuleId 5 → sa_ASupervision
+    case 5:
       return Activity;
 
-    case 13:
+    // SubModuleId 6 → sa_Reultados
+    case 6:
       return ChartNoAxesCombined;
 
-    case 15:
+    // SubModuleId 8 → sa_Planaccion
+    case 8:
       return ClipboardCheck;
 
     default:
@@ -556,37 +569,8 @@ useEffect(() => {
   ]);
 
   /* ============================================================
-     SISTEMA ADMINISTRATIVO ORIGINAL
-  ============================================================ */
-
-  const visibleSistemaAdminSubs = useMemo(() => {
-    /*
-     * Administrador y subadministrador ven todos.
-     */
-    if (esAdministrador) {
-      return sistemaAdminSubModules;
-    }
-
-    if (!perms) {
-      return [];
-    }
-
-    if (perms.allowAll) {
-      return sistemaAdminSubModules;
-    }
-
-    return sistemaAdminSubModules.filter((s) =>
-      allowedSubSet.has(Number(s.id))
-    );
-  }, [
-    esAdministrador,
-    perms,
-    allowedSubSet,
-  ]);
-
-  /* ============================================================
      POR COMPONENTES
-     MODULE ID = 2
+     MODULE ID = 2 (dbo.Modulos_Dgci: por_componentes)
   ============================================================ */
 
   const visiblePorComponentesSubs = useMemo(() => {
@@ -675,16 +659,6 @@ useEffect(() => {
   /* ============================================================
      VISIBILIDAD GENERAL
   ============================================================ */
-
-  /*
-   * Sistema administrativo original.
-   *
-   * No estamos aplicando el control de Apertura_sistema
-   * aquí porque acordamos controlar solamente ModuleId 2 y 6.
-   */
-  const canSeeSistemaAdmin =
-    esAdministrador ||
-    visibleSistemaAdminSubs.length > 0;
 
   /*
    * MODULE ID 2

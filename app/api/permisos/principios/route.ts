@@ -111,11 +111,12 @@ export async function GET(req: Request) {
     });
 
   } catch (error: any) {
+    console.error("ERROR GET /api/permisos/principios:", error);
 
     return NextResponse.json(
       {
         error: "Error al cargar permisos",
-        detail: error.message,
+        detail: "Contacte al administrador del sistema.",
       },
       { status: 500 }
     );

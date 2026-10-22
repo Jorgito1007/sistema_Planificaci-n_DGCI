@@ -455,7 +455,6 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error?.message ||
           "Error cargando módulos",
       },
       {

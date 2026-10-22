@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import Swal from "sweetalert2";
+import { escapeHtml } from "@/lib/sanitize-html";
 
 // ============================================================
 // TIPOS
@@ -2060,7 +2061,7 @@ export function UserPermissionForm({
         </p>
 
         <strong>
-          ${form.email.trim()}
+          ${escapeHtml(form.email.trim())}
         </strong>
 
         <p style="margin-top:10px">

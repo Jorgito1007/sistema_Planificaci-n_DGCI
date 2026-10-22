@@ -397,9 +397,7 @@ export async function POST(
         ok: false,
 
         message:
-          error instanceof Error
-            ? error.message
-            : "No se pudo guardar el borrador.",
+          "No se pudo guardar el borrador.",
       },
       {
         status: 500,

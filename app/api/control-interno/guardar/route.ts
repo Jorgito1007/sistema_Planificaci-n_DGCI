@@ -1271,7 +1271,6 @@ export async function POST(req: NextRequest) {
       {
         ok: false,
         message:
-          error?.message ||
           "Ocurrió un error al guardar la evaluación.",
       },
       {

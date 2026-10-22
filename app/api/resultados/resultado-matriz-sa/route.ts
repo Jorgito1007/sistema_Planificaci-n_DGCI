@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import sql from "mssql";
+import { getCurrentUser } from "@/lib/current-user";
+import { puedeVerSubmodulo } from "@/lib/permisos-api";
 
 // ============================================================
 // GET
@@ -9,6 +11,16 @@ import sql from "mssql";
 
 export async function GET() {
   try {
+    // Solo usuarios con sesión.
+    const me = await getCurrentUser();
+
+    if (!me) {
+      return NextResponse.json(
+        { ok: false, message: "No autenticado." },
+        { status: 401 }
+      );
+    }
+
     const pool = await getPool();
 
     const resultado = await pool.request().query(`
@@ -84,6 +96,30 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    // ==========================================================
+    // AUTENTICACIÓN Y AUTORIZACIÓN
+    // Sesión + permiso sobre el submódulo "m_Reultados"
+    // (administrador / subadministrador tienen acceso total).
+    // ==========================================================
+    const me = await getCurrentUser();
+
+    if (!me) {
+      return NextResponse.json(
+        { ok: false, message: "No autenticado." },
+        { status: 401 }
+      );
+    }
+
+    if (!(await puedeVerSubmodulo(me, "m_Reultados"))) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "No tiene permiso para modificar los resultados.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     const {

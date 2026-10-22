@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     console.error("Error listando matriz:", error);
 
     return NextResponse.json(
-      { ok: false, message: error.message },
+      { ok: false, message: "Error interno del servidor" },
       { status: 500 }
     );
   }

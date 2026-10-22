@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Pencil, Trash2, Eye, EyeOff, KeyRound, Lock, Unlock, Loader2 } from "lucide-react";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
+import { escapeHtml } from "@/lib/sanitize-html";
 
 type UserRow = {
   id: string;
@@ -590,8 +591,8 @@ async function handleResetPassword(u: UserRow) {
     html: `
       <div style="text-align:left;line-height:1.6">
         <p>Se generará una <strong>nueva contraseña temporal</strong> para:</p>
-        <p style="margin-top:8px"><strong>${nombre}</strong></p>
-        <p>${u.email}</p>
+        <p style="margin-top:8px"><strong>${escapeHtml(nombre)}</strong></p>
+        <p>${escapeHtml(u.email)}</p>
         <p style="margin-top:12px">
           La contraseña será enviada al correo institucional y el usuario
           deberá cambiarla en su próximo inicio de sesión.
@@ -644,7 +645,7 @@ async function handleResetPassword(u: UserRow) {
         <p>Se generó una nueva contraseña temporal.</p>
         <p style="margin-top:8px">
           Las nuevas credenciales fueron enviadas a
-          <strong>${u.email}</strong>.
+          <strong>${escapeHtml(u.email)}</strong>.
         </p>
       `,
       confirmButtonColor: "#16a34a",

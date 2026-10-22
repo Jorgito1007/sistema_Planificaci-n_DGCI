@@ -1,10 +1,25 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getPool, sql } from "@/lib/db";
+import { auth } from "@/auth";
+import {
+  puedeIntentar,
+  registrarIntento,
+  limpiarIntentos,
+  obtenerIp,
+} from "@/lib/rate-limit";
+
+/**
+ * Rate limiting del login (fuerza bruta):
+ * 5 intentos fallidos por correo+IP y 20 por IP cada 15 minutos.
+ */
+const MAX_INTENTOS_CORREO = 5;
+const MAX_INTENTOS_IP = 20;
+const VENTANA_MS = 15 * 60 * 1000;
 
 // ============================================================
 // LOGIN
@@ -37,6 +52,33 @@ export async function login(formData: FormData) {
   if (!JWT_SECRET) {
     redirect(
       "/auth/login?error=Falta JWT_SECRET en .env.local"
+    );
+  }
+
+  // ==========================================================
+  // RATE LIMITING (ATAQUES DE FUERZA BRUTA)
+  // ==========================================================
+
+  const cabeceras = await headers();
+  const ip = obtenerIp(cabeceras);
+
+  const claveEmail = `login:${ip}:${email}`;
+  const claveIp = `login-ip:${ip}`;
+
+  if (
+    !puedeIntentar(
+      claveEmail,
+      MAX_INTENTOS_CORREO,
+      VENTANA_MS
+    ) ||
+    !puedeIntentar(
+      claveIp,
+      MAX_INTENTOS_IP,
+      VENTANA_MS
+    )
+  ) {
+    redirect(
+      "/auth/login?error=Demasiados intentos de inicio de sesión. Espere unos minutos e intente de nuevo"
     );
   }
 
@@ -79,12 +121,32 @@ export async function login(formData: FormData) {
   // ==========================================================
 
   if (!user) {
+    registrarIntento(
+      claveEmail,
+      MAX_INTENTOS_CORREO,
+      VENTANA_MS
+    );
+    registrarIntento(
+      claveIp,
+      MAX_INTENTOS_IP,
+      VENTANA_MS
+    );
     redirect(
       "/auth/login?error=Credenciales inválidas"
     );
   }
 
   if (!user.IsActive) {
+    registrarIntento(
+      claveEmail,
+      MAX_INTENTOS_CORREO,
+      VENTANA_MS
+    );
+    registrarIntento(
+      claveIp,
+      MAX_INTENTOS_IP,
+      VENTANA_MS
+    );
     redirect(
       "/auth/login?error=Usuario inactivo"
     );
@@ -101,10 +163,25 @@ export async function login(formData: FormData) {
     );
 
   if (!passwordCorrect) {
+    registrarIntento(
+      claveEmail,
+      MAX_INTENTOS_CORREO,
+      VENTANA_MS
+    );
+    registrarIntento(
+      claveIp,
+      MAX_INTENTOS_IP,
+      VENTANA_MS
+    );
     redirect(
       "/auth/login?error=Credenciales inválidas"
     );
   }
+
+  /**
+   * Login exitoso: reiniciar el contador del correo.
+   */
+  limpiarIntentos(claveEmail);
 
   // ==========================================================
   // CREAR TOKEN
@@ -241,17 +318,19 @@ export async function changeTemporaryPassword(
   }
 
   // ==========================================================
-  // VALIDAR JWT
+  // IDENTIFICAR SESIÓN
+  //
+  // Se aceptan los dos inicios de sesión del sistema:
+  //
+  // 1. auth_token  → login con contraseña (JWT propio)
+  // 2. Sesión Google / Auth.js → quien entró con su correo
+  //
+  // Así, un usuario con contraseña temporal también puede
+  // completar el cambio si ingresó mediante Google.
   // ==========================================================
 
   const JWT_SECRET =
     process.env.JWT_SECRET;
-
-  if (!JWT_SECRET) {
-    redirect(
-      "/auth/login?error=Configuración de seguridad inválida"
-    );
-  }
 
   const cookieStore =
     await cookies();
@@ -261,32 +340,63 @@ export async function changeTemporaryPassword(
       "auth_token"
     )?.value;
 
-  if (!token) {
-    redirect(
-      "/auth/login?error=Sesión no válida"
-    );
+  let userId: string | null = null;
+
+  if (token && JWT_SECRET) {
+    try {
+      const decoded: any =
+        jwt.verify(
+          token,
+          JWT_SECRET
+        );
+
+      userId =
+        decoded?.userId ?? null;
+    } catch {
+      // Token expirado/inválido: se intenta con la sesión de Google.
+      userId = null;
+    }
   }
 
-  let decoded: any;
+  // --------------------------------------------------------
+  // Sesión Google / Auth.js (no existe auth_token)
+  // --------------------------------------------------------
 
-  try {
-    decoded =
-      jwt.verify(
-        token,
-        JWT_SECRET!
-      );
-  } catch {
-    redirect(
-      "/auth/login?error=La sesión expiró. Inicie sesión nuevamente."
-    );
+  if (!userId) {
+    const session =
+      await auth();
+
+    const emailSesion =
+      session?.user?.email?.trim().toLowerCase();
+
+    if (emailSesion) {
+      const poolSesion =
+        await getPool();
+
+      const resultadoSesion =
+        await poolSesion
+          .request()
+          .input(
+            "Email",
+            sql.NVarChar(255),
+            emailSesion
+          )
+          .query(`
+            SELECT TOP 1
+              UserId
+            FROM dbo.Usuarios_Dgci
+            WHERE LOWER(Email) = @Email;
+          `);
+
+      userId =
+        resultadoSesion.recordset[0]?.UserId ??
+        null;
+    }
   }
-
-  const userId =
-    decoded?.userId;
 
   if (!userId) {
     redirect(
-      "/auth/login?error=Sesión no válida"
+      "/auth/login?error=Sesión no válida. Inicie sesión nuevamente."
     );
   }
 
@@ -382,53 +492,34 @@ export async function changeTemporaryPassword(
     `);
 
   // ==========================================================
-  // CREAR NUEVO TOKEN
+  // CERRAR SESIÓN Y REGRESAR AL LOGIN
+  //
+  // La contraseña ya cambió: se eliminan AMBAS cookies
+  // (JWT propio y sesión Google/Auth.js) para que el
+  // usuario ingrese con sus nuevas credenciales.
   // ==========================================================
 
-  const newToken =
-    jwt.sign(
-      {
-        userId:
-          String(user.UserId),
+  cookieStore.delete({
+    name: "auth_token",
+    path: "/",
+  });
 
-        email:
-          user.Email,
+  cookieStore.delete({
+    name: "authjs.session-token",
+    path: "/",
+  });
 
-        role:
-          decoded.role ?? "",
+  cookieStore.delete({
+    name: "__Secure-authjs.session-token",
+    path: "/",
+  });
 
-        full_name:
-          user.FullName ?? "",
-
-        cargo:
-          user.Cargo ?? "",
-
-        mustChangePassword:
-          false,
-      },
-      JWT_SECRET!,
-      {
-        expiresIn: "8h",
-      }
-    );
-
-  cookieStore.set(
-    "auth_token",
-    newToken,
-    {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge:
-        60 * 60 * 8,
-    }
+  redirect(
+    "/auth/login?exito=" +
+      encodeURIComponent(
+        "Contraseña cambiada correctamente. Inicie sesión con su nueva contraseña."
+      )
   );
-
-  // ==========================================================
-  // ENTRAR AL SISTEMA
-  // ==========================================================
-
-  redirect("/dashboard");
 }
 
 // ============================================================

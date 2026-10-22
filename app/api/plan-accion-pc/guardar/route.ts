@@ -491,7 +491,6 @@ export async function POST(
         ok: false,
 
         message:
-          error.message ||
           "No se pudo enviar el Plan de Acción.",
       },
       {

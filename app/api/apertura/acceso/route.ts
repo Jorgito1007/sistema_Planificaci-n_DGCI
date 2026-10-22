@@ -426,7 +426,6 @@ export async function GET(
         estado: "ERROR",
 
         message:
-          error?.message ||
           "Ocurrió un error al verificar el acceso al módulo.",
       },
       {

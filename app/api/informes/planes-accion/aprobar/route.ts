@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, sql } from "@/lib/db";
+import { getCurrentUser } from "@/lib/current-user";
+import { puedeVerModulo } from "@/lib/permisos-api";
 
 export async function POST(req: NextRequest) {
   try {
+    // ==========================================================
+    // AUTENTICACIÓN Y AUTORIZACIÓN
+    // Se requiere sesión y permiso sobre el módulo "informes"
+    // (administrador / subadministrador tienen acceso total).
+    // ==========================================================
+    const me = await getCurrentUser();
+
+    if (!me) {
+      return NextResponse.json(
+        { ok: false, message: "No autenticado." },
+        { status: 401 }
+      );
+    }
+
+    if (!(await puedeVerModulo(me, "informes"))) {
+      return NextResponse.json(
+        { ok: false, message: "No tiene permiso para aprobar planes de acción." },
+        { status: 403 }
+      );
+    }
+
     const { tipo, userId, observaciones } = await req.json();
 
     if (!tipo || !userId) {

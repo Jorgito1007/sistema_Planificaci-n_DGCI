@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { auth } from "@/auth";
 import { getCurrentUserId } from "@/lib/current-user";
-import path from "path";
-import { mkdir, writeFile } from "fs/promises";
 import { sendMail } from "@/lib/sendMail";
+import {
+  validarArchivoSubido,
+  guardarArchivo,
+} from "@/lib/upload-documentos";
 
 
 export async function POST(req: Request) {
@@ -158,45 +160,18 @@ if (!OrigenMatriz) {
     let pdfUrl: string | null = null;
 
     if (file && file.size > 0) {
-      const allowedTypes = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ];
+      const resultado = await validarArchivoSubido(file);
 
-      const ext = path.extname(file.name).toLowerCase();
-      const allowedExt = [".pdf", ".doc", ".docx"];
-
-      if (!allowedTypes.includes(file.type) && !allowedExt.includes(ext)) {
+      if (!resultado.ok) {
         return NextResponse.json(
-          { error: "Solo se permiten archivos PDF, DOC o DOCX" },
+          { error: resultado.error },
           { status: 400 }
         );
       }
 
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      await guardarArchivo(resultado.safeName, resultado.buffer);
 
-      const uploadDir = path.join(process.cwd(), "public", "uploads", "documents");
-      await mkdir(uploadDir, { recursive: true });
-
-
-const baseName = path
-  .basename(file.name, ext)
-  .replace(/\s+/g, "_");
-
-const safeName = `${Date.now()}-${baseName}${ext}`;
-const filePath = path.join(uploadDir, safeName);
-
-await writeFile(filePath, buffer);
-
-pdfUrl = `/api/documents/file/${safeName}`;
-
-console.log("FILE NAME:", file.name);
-console.log("EXT:", ext);
-console.log("SAFE NAME:", safeName);
-console.log("PDF URL:", pdfUrl);
-console.log("FILE PATH:", filePath);
+      pdfUrl = `/api/documents/file/${resultado.safeName}`;
     }
 
     
@@ -446,10 +421,7 @@ try {
 
     return NextResponse.json(
       {
-        error: error?.message || "Error al crear documento",
-        sqlMessage: error?.originalError?.info?.message || null,
-        code: error?.code || null,
-        name: error?.name || null,
+        error: "Error al crear documento",
       },
       { status: 500 }
     );

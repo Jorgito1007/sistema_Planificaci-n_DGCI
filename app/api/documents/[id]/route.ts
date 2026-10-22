@@ -331,8 +331,7 @@ await updateRequest.query(updateSql);
 
     return NextResponse.json(
       {
-        error: error?.message || "Error al actualizar documento",
-        sqlMessage: error?.originalError?.info?.message || null,
+        error: "Error al actualizar documento",
       },
       { status: 500 }
     );
@@ -437,8 +436,7 @@ export async function DELETE(req: Request, context: RouteContext) {
 
     return NextResponse.json(
       {
-        error: error?.message || "Error al eliminar documento",
-        sqlMessage: error?.originalError?.info?.message || null,
+        error: "Error al eliminar documento",
       },
       { status: 500 }
     );

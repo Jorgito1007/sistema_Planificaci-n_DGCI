@@ -86,7 +86,6 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error.message ||
           "Error al obtener las preguntas respondidas",
       },
       { status: 500 }

@@ -276,9 +276,7 @@ export async function PATCH(
           "No se pudo actualizar el estado del usuario.",
 
         detail:
-          error instanceof Error
-            ? error.message
-            : String(error),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

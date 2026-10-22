@@ -7,6 +7,8 @@ export async function GET() {
     const r = await pool.request().query("SELECT GETDATE() AS now");
     return NextResponse.json({ ok: true, now: r.recordset[0].now });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    console.error("ERROR GET /api/db-test:", e);
+
+    return NextResponse.json({ ok: false, error: "Error de conexión a base de datos" }, { status: 500 });
   }
 }

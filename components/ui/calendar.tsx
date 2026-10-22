@@ -54,8 +54,15 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        // react-day-picker v9: IconLeft/IconRight (API v8) ya no existen
+        // y se ignoraban en runtime. Se migra a la API v9 (Chevron)
+        // manteniendo el diseño original del calendario shadcn.
+        Chevron: ({ orientation, ...props }) =>
+          orientation === "left" ? (
+            <ChevronLeft className="h-4 w-4" {...props} />
+          ) : (
+            <ChevronRight className="h-4 w-4" {...props} />
+          ),
       }}
       {...props}
     />

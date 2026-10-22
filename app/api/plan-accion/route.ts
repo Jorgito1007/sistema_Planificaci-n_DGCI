@@ -296,9 +296,7 @@ export async function GET(
         ok: false,
 
         message:
-          error instanceof Error
-            ? error.message
-            : "No se pudo obtener el Plan de Acción.",
+          "No se pudo obtener el Plan de Acción.",
       },
       {
         status: 500,

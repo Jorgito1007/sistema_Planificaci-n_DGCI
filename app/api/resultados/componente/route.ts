@@ -311,9 +311,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron obtener los resultados.",
+          "No se pudieron obtener los resultados.",
       },
       {
         status: 500,

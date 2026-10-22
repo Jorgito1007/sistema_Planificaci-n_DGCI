@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, sql } from "@/lib/db";
 import { getCurrentUserId } from "@/lib/current-user";
-import path from "path";
-import { mkdir, writeFile } from "fs/promises";
+import {
+  validarArchivoSubido,
+  guardarArchivo,
+} from "@/lib/upload-documentos";
 
 export async function PUT(req: NextRequest) {
   try {
@@ -66,62 +68,20 @@ export async function PUT(req: NextRequest) {
 
     const anterior = documentoActual.recordset[0];
 
-    // Validar extensión
-    const ext = path.extname(file.name).toLowerCase();
+    // Validar y guardar archivo (validación estricta centralizada)
+    const resultado = await validarArchivoSubido(file);
 
-    const allowedExt = [
-      ".pdf",
-      ".doc",
-      ".docx",
-    ];
-
-    const allowedTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ];
-
-    if (
-      !allowedExt.includes(ext) &&
-      !allowedTypes.includes(file.type)
-    ) {
+    if (!resultado.ok) {
       return NextResponse.json(
-        { error: "Solo se permiten archivos PDF, DOC o DOCX" },
+        { error: resultado.error },
         { status: 400 }
       );
     }
 
-    // Guardar archivo
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const uploadDir = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "documents"
-    );
-
-    await mkdir(uploadDir, {
-      recursive: true,
-    });
-
-    const baseName = path
-      .basename(file.name, ext)
-      .replace(/\s+/g, "_");
-
-    const safeName =
-      `${Date.now()}-${baseName}${ext}`;
-
-    const filePath = path.join(
-      uploadDir,
-      safeName
-    );
-
-    await writeFile(filePath, buffer);
+    await guardarArchivo(resultado.safeName, resultado.buffer);
 
     const pdfUrl =
-      `/api/documents/file/${safeName}`;
+      `/api/documents/file/${resultado.safeName}`;
 
     // Actualizar MISMO DocumentId
     const result = await pool
@@ -222,7 +182,6 @@ export async function PUT(req: NextRequest) {
       {
         ok: false,
         error:
-          error.message ||
           "No se pudo reemplazar el documento",
       },
       { status: 500 }

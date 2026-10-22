@@ -34,7 +34,7 @@ export async function GET() {
       {
         ok: false,
         avisos: [],
-        error: error?.message || "Error obteniendo avisos activos",
+        error: "Error obteniendo avisos activos",
       },
       { status: 500 }
     );

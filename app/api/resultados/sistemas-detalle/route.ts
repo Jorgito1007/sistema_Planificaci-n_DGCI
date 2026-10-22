@@ -227,9 +227,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron obtener los resultados afirmativos.",
+          "No se pudieron obtener los resultados afirmativos.",
       },
       {
         status: 500,

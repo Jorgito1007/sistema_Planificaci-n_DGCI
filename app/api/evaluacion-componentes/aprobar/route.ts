@@ -1,11 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import sql from "mssql";
+import { getCurrentUser } from "@/lib/current-user";
+import { puedeAprobarResultados } from "@/lib/permisos-api";
 
 export async function POST(request: NextRequest) {
   let transaction: sql.Transaction | null = null;
 
   try {
+    // ============================================================
+    // 0. AUTENTICACIÓN Y AUTORIZACIÓN
+    //
+    // Solo usuarios con rol CanApproveResults (igual que
+    // la interfaz) pueden aprobar resultados consolidados.
+    // ============================================================
+
+    const me = await getCurrentUser();
+
+    if (!me) {
+      return NextResponse.json(
+        { ok: false, message: "No autenticado." },
+        { status: 401 }
+      );
+    }
+
+    if (!(await puedeAprobarResultados(me))) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "No tiene permiso para aprobar resultados.",
+        },
+        { status: 403 }
+      );
+    }
+
     // ============================================================
     // 1. RECIBIR DATOS
     // ============================================================
@@ -167,37 +195,19 @@ console.log(
     `);
 
     // ============================================================
-    // 10. APROBAR DETALLE SEGÚN LA MATRIZ
+    // 10. APROBAR DETALLE
+    //
+    // NOTA: aquí existía un UPDATE sobre
+    // EvaluacionesPrincipioDetalleDGCI y
+    // Matriz_SistemaAdministrativoDetalle sin cláusula WHERE
+    // (afectaba TODAS las filas de las tablas) y sobre una
+    // columna "Aprobado_General" que no existe en esas tablas
+    // (el flag real de aprobación vive en Resultado_*.
+    // Aprobado_General, actualizado en el paso 9).
+    //
+    // Se eliminó por seguridad: el estado de aprobación
+    // queda registrado únicamente en el resultado consolidado.
     // ============================================================
-
-    if (tipo === "COMPONENTES") {
-      // ==========================================================
-      // MATRIZ DE COMPONENTES
-      // ==========================================================
-
-      const requestPreguntas =
-        new sql.Request(transaction);
-
-      await requestPreguntas.query(`
-        UPDATE dbo.EvaluacionesPrincipioDetalleDGCI
-
-        SET
-          Aprobado_General = 1,
-          FechaActualizacion = GETDATE();
-      `);
-
-} else if (tipo === "MATRIZ_SA") {
-  const requestMatrizSA =
-    new sql.Request(transaction);
-
-  await requestMatrizSA.query(`
-    UPDATE dbo.Matriz_SistemaAdministrativoDetalle
-
-    SET
-      Aprobado_General = 1,
-      FechaActualizacion = GETDATE();
-  `);
-}
 
     // ============================================================
     // 11. CONFIRMAR TRANSACCIÓN

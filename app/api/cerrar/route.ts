@@ -8,9 +8,7 @@ import {
   sql,
 } from "@/lib/db";
 
-import {
-  getCurrentUserId,
-} from "@/lib/current-user";
+import { getCurrentUser } from "@/lib/current-user";
 
 // ============================================================
 // POST
@@ -25,10 +23,9 @@ export async function POST(
     // USUARIO AUTENTICADO
     // ========================================================
 
-    const actorUserId =
-      await getCurrentUserId();
+    const me = await getCurrentUser();
 
-    if (!actorUserId) {
+    if (!me) {
       return NextResponse.json(
         {
           ok: false,
@@ -40,6 +37,37 @@ export async function POST(
         }
       );
     }
+
+    // ========================================================
+    // SOLO ADMINISTRACIÓN
+    // Cerrar el período del sistema es una función de
+    // administrador / subadministrador.
+    // ========================================================
+
+    const roleKey = String(
+      me.roleKey || me.role || ""
+    )
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "");
+
+    if (
+      roleKey !== "administrador" &&
+      roleKey !== "subadministrador"
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "No tiene permiso para cerrar el período del sistema.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const actorUserId = me.userId;
 
     // ========================================================
     // OBTENER ID
@@ -218,7 +246,6 @@ export async function POST(
         ok: false,
 
         message:
-          error?.message ||
           "Ocurrió un error al cerrar el período del sistema.",
       },
       {

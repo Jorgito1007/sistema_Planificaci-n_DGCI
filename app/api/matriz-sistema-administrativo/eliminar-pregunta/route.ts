@@ -229,7 +229,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          error.message ||
           "No se pudo eliminar la pregunta.",
       },
       { status: 500 }

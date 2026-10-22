@@ -74,9 +74,7 @@ export async function GET() {
       {
         ok: false,
         message:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron obtener los permisos.",
+          "No se pudieron obtener los permisos.",
       },
       { status: 500 }
     );

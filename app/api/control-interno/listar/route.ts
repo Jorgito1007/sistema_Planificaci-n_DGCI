@@ -410,7 +410,6 @@ export async function GET(req: NextRequest) {
         ok: false,
 
         message:
-          error?.message ||
           "Error interno del servidor",
       },
       {

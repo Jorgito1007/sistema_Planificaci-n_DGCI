@@ -781,9 +781,7 @@ const userId = id;
           "No se pudo reiniciar la contraseña del usuario.",
 
         detail:
-          error instanceof Error
-            ? error.message
-            : String(error),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

@@ -1175,10 +1175,7 @@ const userId =
           "Server error",
 
         detail:
-          String(
-            err?.message ||
-              err
-          ),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

@@ -348,10 +348,7 @@ export async function GET(
       e
     );
 
-    console.error(
-      "PERMS ERROR MESSAGE:",
-      e?.message
-    );
+    console.error("PERMS ERROR MESSAGE:", e?.message);
 
     return NextResponse.json(
       {
@@ -359,9 +356,7 @@ export async function GET(
           "Server error",
 
         detail:
-          String(
-            e?.message || e
-          ),
+          "Contacte al administrador del sistema.",
       },
       {
         status: 500,

@@ -298,9 +298,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron obtener las respuestas.",
+          "No se pudieron obtener las respuestas.",
       },
       {
         status: 500,

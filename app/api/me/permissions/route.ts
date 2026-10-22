@@ -95,8 +95,10 @@ export async function GET() {
       submodules: subRes.recordset ?? [],
     });
   } catch (e: any) {
+    console.error("ERROR GET /api/me/permissions:", e);
+
     return NextResponse.json(
-      { error: "Server error", detail: String(e?.message || e) },
+      { error: "Server error" },
       { status: 500 }
     );
   }

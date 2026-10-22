@@ -10,3 +10,7 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
+
+# Documentos subidos por los usuarios (datos en runtime, nunca en git)
+# Se sirven solo por la API autenticada /api/documents/file
+/uploads/

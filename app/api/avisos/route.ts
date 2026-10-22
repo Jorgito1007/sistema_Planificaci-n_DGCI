@@ -204,7 +204,6 @@ export async function POST(req: NextRequest) {
       {
         ok: false,
         message:
-          error?.message ||
           "No se pudo crear el aviso.",
       },
       { status: 500 }
@@ -403,7 +402,6 @@ FechaActualizacion = DATEADD(HOUR, -6, GETUTCDATE()),
       {
         ok: false,
         message:
-          error?.message ||
           "No se pudo actualizar el aviso.",
       },
       { status: 500 }

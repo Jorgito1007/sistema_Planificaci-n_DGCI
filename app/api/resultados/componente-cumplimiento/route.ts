@@ -271,9 +271,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "No se pudieron obtener los principios.",
+          "No se pudieron obtener los principios.",
       },
       {
         status: 500,

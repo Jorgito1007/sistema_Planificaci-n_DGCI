@@ -18,11 +18,13 @@ import { Button } from "@/components/ui/button";
 
 type Props = {
   error?: string;
+  exito?: string;
   loginAction: (formData: FormData) => void;
 };
 
 export default function LoginForm({
   error,
+  exito,
   loginAction,
 }: Props) {
   const [showPassword, setShowPassword] = useState(false);
@@ -225,6 +227,47 @@ export default function LoginForm({
                   "
                 >
                   {error}
+                </div>
+              )}
+
+              {/* =============================================
+                  MENSAJE DE ÉXITO (ej.: contraseña cambiada)
+              ============================================= */}
+
+              {exito && !error && (
+                <div
+                  className="
+                    mb-4
+                    flex
+                    items-center
+                    justify-center
+                    gap-2
+                    rounded-xl
+                    border
+                    border-emerald-200
+                    bg-emerald-50
+                    px-4
+                    py-2.5
+                    text-center
+                    text-[12px]
+                    font-medium
+                    text-emerald-700
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+
+                  {exito}
                 </div>
               )}
 

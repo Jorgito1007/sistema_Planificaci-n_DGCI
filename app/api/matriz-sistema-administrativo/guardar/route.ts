@@ -20,8 +20,6 @@ import {
 
 export async function POST(req: NextRequest) {
   try {
-    console.log("ENTRÓ A GUARDAR MATRIZ");
-
     /* ========================================================
        1. VERIFICAR APERTURA DEL SISTEMA
 
@@ -69,8 +67,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    console.log("BODY:", body);
-
     /* ========================================================
        3. CONEXIÓN
     ======================================================== */
@@ -97,11 +93,6 @@ export async function POST(req: NextRequest) {
           );
       }
     }
-
-    console.log(
-      "CURRENT USER:",
-      currentUser
-    );
 
     /* ========================================================
        5. VALIDAR AUTENTICACIÓN
@@ -209,11 +200,6 @@ export async function POST(req: NextRequest) {
 
               AND usp.CanView = 1;
         `);
-
-    console.log(
-      "PERMISOS:",
-      permiso.recordset
-    );
 
     /* ========================================================
        11. VALIDAR PERMISO
@@ -437,10 +423,12 @@ export async function POST(req: NextRequest) {
       }
 
       /* ======================================================
-         USUARIO NORMAL
+         USUARIO NORMAL — PREGUNTA EXISTENTE
 
-         Verificar permiso específico
-         sobre la pregunta.
+         Verificar permiso específico sobre la pregunta.
+         Si no tiene CanEdit, se RECHAZA la operación
+         (antes continúaba igual y cualquier usuario con
+         vista del submódulo podía editar preguntas ajenas).
       ====================================================== */
 
       if (
@@ -479,10 +467,78 @@ export async function POST(req: NextRequest) {
             `);
 
         if (
-          asignada.recordset.length > 0
+          asignada.recordset.length === 0
         ) {
-          actorUserIdParaGuardar =
-            actorUserId;
+          return NextResponse.json(
+            {
+              ok: false,
+
+              message:
+                "No tiene permiso para editar esta pregunta.",
+            },
+            {
+              status: 403,
+            }
+          );
+        }
+
+        actorUserIdParaGuardar =
+          actorUserId;
+      }
+
+      /* ======================================================
+         USUARIO NORMAL — NUEVA PREGUNTA
+
+         Exige el permiso de rol CanAddMatrixItems
+         (mismo criterio que el botón "Agregar" de la
+         interfaz: /api/matriz-sistema-administrativo/permisos).
+      ====================================================== */
+
+      if (
+        !isAdmin &&
+        questionId === 0
+      ) {
+        const permisoAgregar =
+          await pool
+            .request()
+
+            .input(
+              "UserId",
+              sql.UniqueIdentifier,
+              actorUserId
+            )
+
+            .query(`
+              SELECT
+                  MAX(
+                      CAST(r.CanAddMatrixItems AS INT)
+                  ) AS PuedeAgregar
+
+              FROM dbo.UserRoles_Dgci AS ur
+
+              INNER JOIN dbo.Roles_Dgci AS r
+                  ON r.RoleId = ur.RoleId
+
+              WHERE ur.UserId = @UserId;
+            `);
+
+        if (
+          Number(
+            permisoAgregar.recordset[0]
+              ?.PuedeAgregar ?? 0
+          ) !== 1
+        ) {
+          return NextResponse.json(
+            {
+              ok: false,
+
+              message:
+                "No tiene permiso para agregar preguntas.",
+            },
+            {
+              status: 403,
+            }
+          );
         }
       }
 
@@ -727,7 +783,6 @@ export async function POST(req: NextRequest) {
         ok: false,
 
         message:
-          error?.message ||
           "Ocurrió un error al guardar la matriz.",
       },
       {

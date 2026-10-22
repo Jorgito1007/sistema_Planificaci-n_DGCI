@@ -339,7 +339,6 @@ export async function POST(req: Request) {
       {
         ok: false,
         message:
-          error.message ||
           "No se pudo guardar el borrador.",
       },
       {
